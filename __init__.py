@@ -26,6 +26,8 @@ NODE_CLASS_MAPPINGS = {
     "AIHubPatchActionSetConfigString": AIHubPatchActionSetConfigString,
     
     "AIHubActionNewImage": AIHubActionNewImage,
+
+    "AIHubDevWebsocketDebug": AIHubDevWebsocketDebug,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -54,6 +56,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "AIHubPatchActionSetConfigFloat": "AIHub Patch Action Set Config Float",
     "AIHubPatchActionSetConfigBoolean": "AIHub Patch Action Set Config Boolean",
     "AIHubPatchActionSetConfigString": "AIHub Patch Action Set Config String",
+
+    "AIHubDevWebsocketDebug": "AIHub developer websocket debug",
 }
 
 __all__ = [

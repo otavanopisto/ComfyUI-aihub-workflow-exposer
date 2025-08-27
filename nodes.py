@@ -17,7 +17,12 @@ import numpy as np
 
 #import LoadVideoPath
 
-from server import PromptServer, BinaryEventTypes
+#from server import PromptServer, BinaryEventTypes
+from .server import AIHubServer
+
+SERVER = AIHubServer()
+SERVER.start_server()
+print("AIHub Server Started ===========================================================================================================================================================================")
 
 class AIHubWorkflowController:
     """
@@ -34,7 +39,8 @@ class AIHubWorkflowController:
                 "description": ("STRING", {"tooltip": "The noise to use.", "multiline": True, "default": ""}),
                 "category": ("STRING", {"tooltip": "A path to be used within the menu, separated by /", "default": "my_custom_workflow"}),
                 "context": (["image", "video", "audio"], {"tooltip": "The context of this workflow", "default": "image"}),
-                "limit_to_project_type": ("STRING", {"tooltip": "The project type is set by a project patcher and is an arbitrary string for specific workflows to be allowed once it becomes that type, leave empty if no project or can be used outside a project context"})
+                "project_type": ("STRING", {"tooltip": "The project type is an arbitrary string that limits in which context the workflow can be used"}),
+                "project_type_init": ("BOOLEAN", {"tooltip": "This workflow can initialize the given project type, provided an empty project folder"})
                 # eg. project types I think about implementing, ltxv, sdxl-character
             },
         }
@@ -136,7 +142,7 @@ class AIHubExposeFloat:
             }
         }
 
-    def get_exposed_float(self, label, tooltip, min, max, step, start, value, advanced, index):
+    def get_exposed_float(self, id, label, tooltip, min, max, step, start, value, advanced, index):
         if (value < min):
             raise ValueError(f"Error: {id} should be greater or equal to {min}")
         if (value > max):
@@ -240,9 +246,9 @@ class AIHubExposeString:
 
     def get_exposed_string(self, id, label, tooltip, minlen, maxlen, value, advanced, index):
         if (len(value) < minlen):
-            raise ValueError(f"Error: {id} length should be greater or equal to {minlen}")
+            raise ValueError(f"Error: {label} length should be greater or equal to {minlen}")
         if (len(value) > maxlen):
-            raise ValueError(f"Error: {id} length should be less or equal to {maxlen}")
+            raise ValueError(f"Error: {label} length should be less or equal to {maxlen}")
         return (value,)
     
 class AIHubExposeConfigString:
@@ -291,7 +297,7 @@ class AIHubExposeStringSelection:
     def get_exposed_selection(self, id, label, tooltip, options, options_label, value, advanced, index):
         optionsparsed = [o.strip() for o in options.split("\n") if o.strip()]
         if value not in optionsparsed:
-            raise ValueError(f"Error: {id} The value given is not in the list of options")
+            raise ValueError(f"Error: {label} The value given is not in the list of options")
         return (value,)
     
 class AIHubExposeSeed:
@@ -384,7 +390,7 @@ class AIHubExposeImage:
             },
             "optional": {
                 "value": ("IMAGE",),
-                "local_file": ("HIDDEN",),
+                "local_file": ("STRING",),
             },
         }
 
@@ -426,8 +432,8 @@ class AIHubExposeImageInfoOnly:
             },
             "optional": {
                 "value": ("IMAGE",),
-                "value_width": ("INT", {"tooltip": "width of the image.", "hidden": "always"}),
-                "value_height": ("INT", {"tooltip": "height of the image.", "hidden": "always"}),
+                "value_width": ("INT", {"tooltip": "width of the image."}),
+                "value_height": ("INT", {"tooltip": "height of the image."}),
             }
         }
 
@@ -460,7 +466,7 @@ class AIHubExposeImageBatch:
             },
             "optional": {
                 "values": ("IMAGE",),
-                "local_filenames": ("HIDDEN", {"default": "[]"}),
+                "local_filenames": ("STRING", {"default": "[]"}),
             }
         }
 
@@ -509,7 +515,7 @@ class AIHubActionNewImage:
     CATEGORY = "aihub/actions"
     FUNCTION = "run_action"
     
-    RETURN_TYPES = ()
+    RETURN_TYPES = ("IMAGE", )
     OUTPUT_NODE = True
 
     @classmethod
@@ -524,22 +530,54 @@ class AIHubActionNewImage:
         image = image[0]
         i = 255. * image.cpu().numpy()
         img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
-        server = PromptServer.instance
-        server.send_sync(
-            BinaryEventTypes.UNENCODED_PREVIEW_IMAGE,
-            ["PNG", img, None],
-            server.client_id,
+        SERVER.send_binary_data_to_current_client(
+            img, "image/png", {
+                "action": "NEW_IMAGE",
+                "width": image.shape[3],
+                "height": image.shape[2],
+                "type": "image/png",
+            },
         )
 
+        return (image,)
+    
+class AIHubActionNewLayer:
+    CATEGORY = "aihub/actions"
+    FUNCTION = "run_action"
+    
+    RETURN_TYPES = ("IMAGE", )
+    OUTPUT_NODE = True
+
+    @classmethod
+    def INPUT_TYPES(s):
         return {
-                "ui": {
-                    "images": [{
-                        "source": "websocket",
-                        "content-type": "image/png",
-                        "type": "output",
-                    }]
-                }
+            "required": {
+                "image": ("IMAGE",),
+                "pos_x": ("INT", {"default": 0, "tooltip": "The X position of the layer in the canvas"}),
+                "pos_y": ("INT", {"default": 0, "tooltip": "The Y position of the layer in the canvas"}),
+                "pos_z": ("INT", {"default": 0, "tooltip": "The Z (Layer) position of the image."}),
+                "replace": ("BOOLEAN", {"default": False, "tooltip": "If true, it will replace the layer at the given Z position, otherwise it will insert a new layer at that position"}),
             }
+        }
+    
+    def run_action(image, pos_x, pos_y, pos_z, replace):
+        image = image[0]
+        i = 255. * image.cpu().numpy()
+        img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
+        SERVER.send_binary_data_to_current_client(
+            img, "image/png",{
+                "action": "NEW_LAYER",
+                "width": image.shape[3],
+                "height": image.shape[2],
+                "type": "image/png",
+                "pos_x": pos_x,
+                "pos_y": pos_y,
+                "pos_z": pos_z,
+                "replace": replace,
+            },
+        )
+
+        return (image,)
     
 class AIHubActionSetProgressStatus:
     """
@@ -562,14 +600,14 @@ class AIHubActionSetProgressStatus:
         }
 
     def run_action(self, value):
-        server = PromptServer.instance
-        server.send_sync(
-            "AIHUB_ACTION_SET_PROGRESS_STATUS",
-            {
-                "status": value,
-            },
-            server.client_id,
-        )
+        #server = PromptServer.instance
+        #server.send_sync(
+        #    "AIHUB_ACTION_SET_PROGRESS_STATUS",
+        #    {
+        #        "status": value,
+        #    },
+        #    server.client_id,
+        #)
 
         return (value)
     
@@ -595,15 +633,15 @@ class AIHubPatchActionSetConfigInteger:
         }
 
     def run_action(self, field, value):
-        server = PromptServer.instance
-        server.send_sync(
-            "AIHUB_PATCH_ACTION_SET_CONFIG_INTEGER",
-            {
-                "field": field,
-                "value": value,
-            },
-            server.client_id,
-        )
+        #server = PromptServer.instance
+        #server.send_sync(
+        #    "AIHUB_PATCH_ACTION_SET_CONFIG_INTEGER",
+        #    {
+        #        "field": field,
+        #        "value": value,
+        #    },
+        #    server.client_id,
+        #)
 
         return ()
     
@@ -627,15 +665,15 @@ class AIHubPatchActionSetConfigFloat:
         }
 
     def run_action(self, field, value):
-        server = PromptServer.instance
-        server.send_sync(
-            "AIHUB_PATCH_ACTION_SET_CONFIG_FLOAT",
-            {
-                "field": field,
-                "value": value,
-            },
-            server.client_id,
-        )
+        #server = PromptServer.instance
+        #server.send_sync(
+        #    "AIHUB_PATCH_ACTION_SET_CONFIG_FLOAT",
+        #    {
+        #        "field": field,
+        #        "value": value,
+        #    },
+        #    server.client_id,
+        #)
 
         return ()
     
@@ -659,15 +697,15 @@ class AIHubPatchActionSetConfigBoolean:
         }
 
     def run_action(self, field, value):
-        server = PromptServer.instance
-        server.send_sync(
-            "AIHUB_PATCH_ACTION_SET_CONFIG_BOOLEAN",
-            {
-                "field": field,
-                "value": value,
-            },
-            server.client_id,
-        )
+        #server = PromptServer.instance
+        #server.send_sync(
+        #    "AIHUB_PATCH_ACTION_SET_CONFIG_BOOLEAN",
+        #    {
+        #        "field": field,
+        #        "value": value,
+        #    },
+        #    server.client_id,
+        #)
 
         return ()
     
@@ -691,15 +729,15 @@ class AIHubPatchActionSetConfigString:
         }
 
     def run_action(self, field, value):
-        server = PromptServer.instance
-        server.send_sync(
-            "AIHUB_PATCH_ACTION_SET_CONFIG_STRING",
-            {
-                "field": field,
-                "value": value,
-            },
-            server.client_id,
-        )
+        #server = PromptServer.instance
+        #server.send_sync(
+        #    "AIHUB_PATCH_ACTION_SET_CONFIG_STRING",
+        #    {
+        #        "field": field,
+        #        "value": value,
+        #    },
+        #    server.client_id,
+        #)
 
         return ()
     
@@ -717,3 +755,26 @@ class AIHubPatchActionSetAudio:
 
 class AIHubPatchActionSetPreviewImage:
     pass
+
+class AIHubDevWebsocketDebug:
+    """
+    A developer tool in order to test websocket information from within comfyui, you should change the seed in order
+    to retrieve new information
+    """
+
+    CATEGORY = "aihub/actions"
+    FUNCTION = "run_action"
+
+    RETURN_TYPES = ("*", )
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "retrieve": (["LAST_PING_QUEUE_VALUE"], {"tooltip": "The element to retrieve"}),
+                "seed": ("STRING", {"default": "42", "tooltip": "A random seed in order to trigger "}),
+            }
+        }
+
+    def run_action(self, seed):
+        return (SERVER.LAST_PING_QUEUE_VALUE, )
