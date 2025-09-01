@@ -6,20 +6,29 @@ from os import path, listdir, environ, makedirs, remove, rmdir
 from copy import deepcopy
 import tempfile
 from time import sleep
+import re
 
 from aiohttp import web
+from server import PromptServer
+from execution import validate_prompt
 
 WEB_SOCKET_SERVER_PORT = 8000
 SERVER_THREAD = None
 SERVER_RUNNING_FLAG = threading.Event()
 
-AIHUB_COLD_WORKFLOWS = environ.get("AIHUB_COLD_WORKFLOWS", "0") == "1"
-AIHUB_WORKFLOWS_DIR = environ.get("AIHUB_WORKFLOWS_DIR", None)
+AIHUB_COLD = environ.get("AIHUB_COLD", "0") == "1"
+AIHUB_DIR = environ.get("AIHUB_DIR", None)
 AIHUB_PERSIST_TEMPFILES = environ.get("AIHUB_PERSIST_TEMPFILES", False)
 
 WORKFLOWS_CACHE_RAW = None
 WORKFLOWS_CACHE_VALID = None
 WORKFLOWS_AIHUB_SUMMARY = None
+
+LORAS_CACHE_RAW = None
+LORAS_CACHE_CLEANED = None
+
+MODELS_CACHE_RAW = None
+MODELS_CACHE_CLEANED = None
 
 AIHUB_TEMP_DIRECTORY_ENV = environ.get("AIHUB_TEMP_DIR", None)
 AIHUB_TEMP_DIRECTORY = AIHUB_TEMP_DIRECTORY_ENV if AIHUB_TEMP_DIRECTORY_ENV is not None else tempfile.gettempdir()
@@ -35,42 +44,205 @@ class AIHubServer:
 
     LAST_PING_QUEUE_VALUE = None
 
+    aihub_dir = AIHUB_DIR if AIHUB_DIR is not None else path.join(path.dirname(path.abspath(__file__)), "..", "..", "aihub")
+    workflows_dir = path.join(aihub_dir, "workflows")
+    loras_dir = path.join(aihub_dir, "loras")
+    models_dir = path.join(aihub_dir, "models")
+
     def __init__(self):
+        # create folder ../../aihub if it doesnt't exist
+        if not path.exists(self.aihub_dir):
+            makedirs(self.aihub_dir)
+        
+        # create folder ../../aihub/workflows if it doesn't exist
+        if not path.exists(self.workflows_dir):
+            makedirs(self.workflows_dir)
+
+        # create folder ../../aihub/loras if it doesn't exist
+        if not path.exists(self.loras_dir):
+            makedirs(self.loras_dir)
+
+        # create folder ../../aihub/models if it doesn't exist
+        if not path.exists(self.models_dir):
+            makedirs(self.models_dir)
+        
         return
+    
+    def retrieve_checkpoints_raw(self):
+        """
+        Retrieves all checkpoints json information from the aihub/models directory.
+        checkpoint json files are expected to have the following attributes:
+        0. id: the unique id of the model, must be alphanumeric and underscores only
+        1. name: the name of the model as will be seen by the user
+        2. path: the path of the model as it exist within the comfyui models list
+        3. family: the family of the model, e.g. "stable-diffusion", "sdxl", "other"
+        4. context: the context of the model, e.g. "image", "video", "3d", "text", "audio"
+        5. default_cfg (optional): the default cfg value to use with this model
+        6. default_steps (optional): the default steps value to use with this model
+        7. default_sampler (optional): the default sampler to use with this model
+        8. default_scheduler (optional): the default scheduler to use with this model
+        9. vae_path: (optional) the path of the vae model as it exist within the comfyui vae list
+        10. clip_path: (optional) the path of the clip model as it exist within the comfyui clip list
+        11. lora_paths: (optional) a list of lora paths that will be applied to the model and the given weights as a dictionary of {path: "path", weight: float}
+        12. description: (optional) a description of the model
+        """
+
+        if (AIHUB_COLD and MODELS_CACHE_RAW is not None):
+            return MODELS_CACHE_RAW
+        
+        # first let's read the files in the ComfyUI models directory
+        print(f"Loading models from directory: {self.models_dir}")
+
+        # if the directory does not exist, return empty list
+        if path.exists(self.models_dir):
+            # otherwise, read the files
+            files = listdir(self.models_dir)
+            models = []
+            for file in files:
+                if file.endswith(".json"):
+                    with open(path.join(self.models_dir, file), "r", encoding="utf-8") as f:
+                        try:
+                            model_data = json.load(f)
+                            models.append(model_data)
+                        except json.JSONDecodeError:
+                            print(f"Error decoding JSON from model file: {file}")
+
+            if AIHUB_COLD:
+                MODELS_CACHE_RAW = models
+
+            return models
+        return []
+    
+    def retrieve_checkpoints_cleaned(self):
+        """
+        Retrieves all checkpoints json information but only what is important for the client.
+        basically id, name, family, context, default_cfg, default_steps, default_sampler, default_scheduler and description.
+        """
+
+        if (AIHUB_COLD and MODELS_CACHE_CLEANED is not None):
+            return MODELS_CACHE_CLEANED
+        
+        raw_models = self.retrieve_checkpoints_raw()
+        cleaned_models = []
+
+        for model in raw_models:
+            cleaned_model = {
+                "id": model.get("id", None),
+                "name": model.get("name", None),
+                "family": model.get("family", None),
+                "context": model.get("context", None),
+                "description": model.get("description", ""),
+                "default_cfg": model.get("default_cfg", None),
+                "default_steps": model.get("default_steps", None),
+                "default_sampler": model.get("default_sampler", None),
+                "default_scheduler": model.get("default_scheduler", None),
+            }
+            cleaned_models.append(cleaned_model)
+
+        if AIHUB_COLD:
+            MODELS_CACHE_CLEANED = cleaned_models
+
+        return cleaned_models
+    
+    def retrieve_loras_raw(self):
+        """
+        Retrieves all loras information from the aihub/loras directory.
+        
+        lora json files are expected to have the following attributes:
+        
+        0. id: the unique id of the lora, must be alphanumeric and underscores only
+        1. name: the name of the lora as will be seen by the user
+        2. path: the path of the lora as it exist within the comfyui loras list
+        3. family: the family of the checkpoint this lora should apply to, e.g. "stable-diffusion", "sdxl", "other"
+        4. context: the context of the checkpoint this lora should apply to, e.g. "image", "video", "3d", "text", "audio"
+        5. default_strength: (optional) the default strength value to use with this lora
+        6. force_model: (optional) a string that specifies that this lora will only be allowed to be used with the specified checkpoint id
+        """
+
+        if (AIHUB_COLD and LORAS_CACHE_RAW is not None):
+            return LORAS_CACHE_RAW
+        
+        # first let's read the files in the ComfyUI loras directory
+        print(f"Loading loras from directory: {self.loras_dir}")
+
+        # if the directory does not exist, return empty list
+        if path.exists(self.loras_dir):
+            # otherwise, read the files
+            files = listdir(self.loras_dir)
+            loras = []
+            for file in files:
+                if file.endswith(".json"):
+                    with open(path.join(self.loras_dir, file), "r", encoding="utf-8") as f:
+                        try:
+                            lora_data = json.load(f)
+                            loras.append(lora_data)
+                        except json.JSONDecodeError:
+                            print(f"Error decoding JSON from lora file: {file}")
+
+            if AIHUB_COLD:
+                LORAS_CACHE_RAW = loras
+
+            return loras
+        return []
+    
+    def retrieve_loras_cleaned(self):
+        """
+        Retrieves all loras information but only what is important for the client.
+        Basically all but the path that specifies where the lora is in the server
+        """
+
+        if (AIHUB_COLD and LORAS_CACHE_CLEANED is not None):
+            return LORAS_CACHE_CLEANED
+        
+        raw_loras = self.retrieve_loras_raw()
+        cleaned_loras = []
+
+        for lora in raw_loras:
+            cleaned_lora = {
+                "id": lora.get("id", None),
+                "name": lora.get("name", None),
+                "family": lora.get("family", None),
+                "context": lora.get("context", None),
+                "description": lora.get("description", ""),
+                "default_strength": lora.get("default_strength", None),
+                "force_model": lora.get("force_model", None),
+            }
+            cleaned_loras.append(cleaned_lora)
+
+        if AIHUB_COLD:
+            LORAS_CACHE_CLEANED = cleaned_loras
+
+        return cleaned_loras
     
     def retrieve_workflows_raw(self):
         """
         Retrieves all workflow JSON files from the specified directory.
         1. Reads all JSON files in the ComfyUI workflows directory.
         2. Parses them into Python dictionaries.
-        3. Caches the results if AIHUB_COLD_WORKFLOWS is enabled.
+        3. Caches the results if AIHUB_COLD is enabled.
         4. Returns a list of workflow dictionaries.
         """
-        if (AIHUB_COLD_WORKFLOWS and WORKFLOWS_CACHE_RAW is not None):
+        if (AIHUB_COLD and WORKFLOWS_CACHE_RAW is not None):
             return WORKFLOWS_CACHE_RAW
         
         # first let's read the files in the ComfyUI workflows directory
-        workflows_dir = path.join(AIHUB_WORKFLOWS_DIR if AIHUB_WORKFLOWS_DIR is not None else path.dirname(path.abspath(__file__)), "..", "..", "user", "default", "workflows")
-        print(f"Loading workflows from directory: {workflows_dir}")
+        print(f"Loading workflows from directory: {self.workflows_dir}")
 
         # if the directory does not exist, return empty list
-        if path.exists(workflows_dir):
+        if path.exists(self.workflows_dir):
             # otherwise, read the files
-            files = listdir(workflows_dir)
+            files = listdir(self.workflows_dir)
             workflows = []
             for file in files:
                 if file.endswith(".json"):
-                    with open(path.join(workflows_dir, file), "r", encoding="utf-8") as f:
+                    with open(path.join(self.workflows_dir, file), "r", encoding="utf-8") as f:
                         try:
                             workflow_data = json.load(f)
-                            # we will add this file name to the workflow data for reference
-                            # for errors and debugging
-                            workflow_data["__source_file"] = file
                             workflows.append(workflow_data)
                         except json.JSONDecodeError:
                             print(f"Error decoding JSON from workflow file: {file}")
 
-            if AIHUB_COLD_WORKFLOWS:
+            if AIHUB_COLD:
                 WORKFLOWS_CACHE_RAW = workflows
 
             return workflows
@@ -89,47 +261,62 @@ class AIHubServer:
         # that establishes them as valid for AIHub processing.
         # the node type we are looking for is "AIHubWorkflowController"
 
-        if (AIHUB_COLD_WORKFLOWS and WORKFLOWS_CACHE_VALID is not None):
+        if (AIHUB_COLD and WORKFLOWS_CACHE_VALID is not None):
             return WORKFLOWS_CACHE_VALID
         
         raw_workflows = self.retrieve_workflows_raw()
         valid_workflows = []
 
         for workflow in raw_workflows:
-            if "nodes" in workflow:
-                for node in workflow["nodes"]:
-                    if node.get("type") == "AIHubWorkflowController":
-                        valid_workflows.append(workflow)
-                        break
+            if workflow is None or not isinstance(workflow, dict):
+                continue
+            for key, node in workflow.items():
+                if node.get("class_type", None) == "AIHubWorkflowController":
+                    valid_workflows.append(workflow)
+                    break
 
-        if AIHUB_COLD_WORKFLOWS:
+        if AIHUB_COLD:
             WORKFLOWS_CACHE_VALID = valid_workflows
 
         return valid_workflows
     
-    def retrieve_valid_workflows_aihub_summary_cleaned(self):
+    def retrieve_valid_workflow_aihub_summary_from(self, workflow):
         """
-        Retrieves all aihub summaries but removes any properties that start with __
-        within the expose data.
+        Retrieves the aihub summary for a specific workflow.
+        This is used to provide the client with the basic information
+        about the workflow without sending the whole workflow data.
         """
+        # we build the basic data structure for the workflow summary
+        workflow_summary = {"expose":{}}
 
-        summaries = self.retrieve_valid_workflows_aihub_summary()
-        cleaned_summaries = deepcopy(summaries)
+        # we will iterate through the nodes to find the AIHubWorkflowController node
+        # and the AIHubExpose nodes, and extract their parameters
+        for key, node in workflow.items():
 
-        for workflow_id in cleaned_summaries:
-            expose = cleaned_summaries[workflow_id].get("expose", {})
-            for expose_id in expose:
-                expose_info = expose[expose_id]
-                keys_to_remove = [key for key in expose_info if key.startswith("__")]
-                for key in keys_to_remove:
-                    del expose_info[key]
+            # check if it is a AIHubWorkflowController or AIHubExpose node
+            # those are the only nodes we care about for the summary
+            if node.get("class_type") == "AIHubWorkflowController" or node.get("class_type", "").startswith("AIHubExpose"):
+                # the basic data structure for the node summary
+                data = node.get("inputs", {})
 
-                expose_data = expose_info.get("data", {})
-                keys_to_remove = [key for key in expose_data if key.startswith("__")]
-                for key in keys_to_remove:
-                    del expose_data[key]
+                # if it is a controller node, we copy all the data to the workflow summary
+                if node.get("class_type") == "AIHubWorkflowController":
+                    # put every property of data into workflow_summary
+                    for key in data:
+                        workflow_summary[key] = data[key]
 
-        return cleaned_summaries
+                # if it is an AIHubExpose node, we add it to the expose list
+                else:
+                    # add a new expose in the expose list
+                    id = data.get("id", None)
+
+                    # store the expose data
+                    workflow_summary["expose"][id] = {
+                        "type": node.get("class_type"),
+                        "data": data,
+                    }
+
+        return workflow_summary
     
     def retrieve_valid_workflows_aihub_summary(self):
         """
@@ -144,7 +331,7 @@ class AIHubServer:
         # contain only the nodes that start with AIHubExpose and the value of the parameters
         # as key value pairs
 
-        if (AIHUB_COLD_WORKFLOWS and WORKFLOWS_AIHUB_SUMMARY is not None):
+        if (AIHUB_COLD and WORKFLOWS_AIHUB_SUMMARY is not None):
             return WORKFLOWS_AIHUB_SUMMARY
         
         valid_workflows = self.retrieve_valid_workflows()
@@ -152,140 +339,19 @@ class AIHubServer:
 
         for workflow in valid_workflows:
             # we build the basic data structure for the workflow summary
-            workflow_summary = {"expose":{}}
+            workflow_summary = self.retrieve_valid_workflow_aihub_summary_from(workflow)
 
-            # keep this as a flag to skip corrupted workflows
-            corrupted = False
+            # get the workflow id
+            workflow_id = workflow_summary.get("id")
 
-            # we will iterate through the nodes to find the AIHubWorkflowController node
-            # and the AIHubExpose nodes, and extract their parameters
-            if "nodes" in workflow:
+            # check for duplicate workflow ids
+            if aihub_summaries.get(workflow_id) is not None:
+                print("Warning: duplicate workflow id found, overwriting previous workflow with id " + workflow_id)
 
-                # iterate through nodes with index to be able to reference them later
-                for i in range(0, len(workflow["nodes"])):
+            # store the workflow summary
+            aihub_summaries[workflow_id] = workflow_summary
 
-                    # no need to continue if already corrupted
-                    if corrupted:
-                        break
-
-                    # get the node
-                    node = workflow["nodes"][i]
-
-                    # check if it is a AIHubWorkflowController or AIHubExpose node
-                    # those are the only nodes we care about for the summary
-                    if node.get("type") == "AIHubWorkflowController" or node.get("type").startswith("AIHubExpose"):
-                        # the basic data structure for the node summary
-                        data = {}
-
-                        # we will iterate through the inputs to find the ones with widgets
-                        # since those specify the data structure for the expose, such as data type, name, etc...
-                        widgetindex = -1
-                        # this is where comfy stores the values for the widgets
-                        widgetvalues = node.get("widgets_values", [])
-
-                        # now we loop through the inputs
-                        for input in node.get("inputs", []):
-                            # if it has a widget, we care about it
-                            if "widget" in input:
-                                # increment the widget index
-                                widgetindex += 1
-
-                                # if the widget index is out of range, the workflow is corrupted
-                                if (widgetindex >= len(widgetvalues)):
-                                    print("Warning: widget index out of range for workflow input, corrupted workflow on comfyui id " +
-                                          workflow.get("__source_file", "unknown") + " node id " + str(node.get("id", "unknown")))
-                                    corrupted = True
-                                    break
-
-                                # get the widget value
-                                widgetvalue = widgetvalues[widgetindex]
-
-                                # store the value in the data structure with the input name as key
-                                input_name = input["name"]
-                                data[input_name] = widgetvalue
-
-                                # special handling for value and local_file inputs
-                                # we need to store the widget index for those inputs
-                                # local_file takes priority over value if both are present
-                                if input_name == "value" or input_name == "local_file" or input_name == "values" or input_name == "local_files":
-                                    if ("__widget_is_file" in data and data["__widget_is_file"] is True):
-                                        # already found a local_file input, skip value input
-                                        continue
-
-                                    # otherwise store the widget index and if it is a file input
-                                    # this will ensure that local_file takes priority over value
-                                    data["__widget_index"] = widgetindex
-                                    data["__widget_is_file"] = input_name == "local_file" or input_name == "local_files"
-                                    data["__widget_is_multiple_files"] = input_name == "local_files"
-
-                                # special handling for value_fixed input
-                                # this is used for the ExposeSeed node to indicate the fixed value of the seed
-                                if input_name == "value_fixed":
-                                    data["__widget_value_fixed_index"] = widgetvalue
-                                    data["__widget_value_fixed"] = True
-
-                        # if the workflow is already corrupted, skip further processing
-                        if corrupted:
-                            break
-
-                        # if it is a controller node, we copy all the data to the workflow summary
-                        if node.get("type") == "AIHubWorkflowController":
-                            # put every property of data into workflow_summary
-                            for key in data:
-                                workflow_summary[key] = data[key]
-
-                        # if it is an AIHubExpose node, we add it to the expose list
-                        else:
-                            # add a new expose in the expose list
-                            id = data.get("id", None)
-
-                            # if the widget index is -1, it means we did not find a value or local_file input
-                            # which means the workflow is corrupted
-                            if data.get("__widget_index", -1) == -1:
-                                print("Warning: missing value or local_file input for expose node, corrupted workflow on comfyui id " +
-                                    workflow.get("__source_file", "unknown") + " node id " + str(node.get("id", "unknown")))
-                                corrupted = True
-                                break
-
-                            # id is required and must be unique
-                            if id is None:
-                                print("Warning: missing id for expose node, corrupted workflow on comfyui id " +
-                                      workflow.get("__source_file", "unknown") + " node id " + str(node.get("id", "unknown")))
-                                corrupted = True
-                                break
-                            if id in workflow_summary["expose"]:
-                                print("Warning: duplicate expose id found, corrupted workflow on comfyui id " +
-                                      workflow.get("__source_file", "unknown") + " node id " + str(node.get("id", "unknown")))
-                                corrupted = True
-                                break
-
-                            # store the expose data
-                            workflow_summary["expose"][id] = {
-                                "type": node.get("type"),
-                                "data": data,
-                                # special property to reference the node index in the workflow
-                                "__node_index": i,
-                            }
-
-            # if the workflow is not corrupted, we add it to the summaries list
-            if not corrupted:
-                # workflow id is required
-                if "id" not in workflow_summary:
-                    print("Warning: missing id for workflow, corrupted workflow on comfyui id " +
-                          workflow.get("__source_file", "unknown"))
-                    continue
-
-                # get the workflow id
-                workflow_id = workflow_summary.get("id")
-
-                # check for duplicate workflow ids
-                if aihub_summaries.get(workflow_id) is not None:
-                    print("Warning: duplicate workflow id found, overwriting previous workflow with id " + workflow_id)
-
-                # store the workflow summary
-                aihub_summaries[workflow_id] = workflow_summary
-
-        if AIHUB_COLD_WORKFLOWS:
+        if AIHUB_COLD:
             WORKFLOWS_AIHUB_SUMMARY = aihub_summaries
                     
         return aihub_summaries
@@ -297,34 +363,18 @@ class AIHubServer:
         """
 
         valid_workflows = None
-        if AIHUB_COLD_WORKFLOWS and WORKFLOWS_CACHE_VALID is not None:
+        if AIHUB_COLD and WORKFLOWS_CACHE_VALID is not None:
             valid_workflows = WORKFLOWS_CACHE_VALID
         else:
             valid_workflows = self.retrieve_valid_workflows()
 
         #retrieve a specific workflow by the controller id
         for workflow in valid_workflows:
-            if "nodes" in workflow:
-                for node in workflow["nodes"]:
+             for key, node in workflow.items():
+                if node.get("class_type", None) == "AIHubWorkflowController":
+                    if node.get("inputs", {}).get("id", None) == workflow_id:
+                        return workflow
 
-                    # it must have a AIHubWorkflowController node
-                    if node.get("type") == "AIHubWorkflowController":
-                        widgetindex = -1
-                        widgetvalues = node.get("widgets_values", [])
-                        for input in node.get("inputs", []):
-                            if "widget" in input:
-                                widgetindex += 1
-
-                                if (widgetindex >= len(widgetvalues)):
-                                    break
-
-                                if input["name"] != "id":
-                                    continue
-
-                                widgetvalue = widgetvalues[widgetindex]
-
-                                if widgetvalue == workflow_id:
-                                    return workflow
         return None
     
     def retrieve_workflow_summary_by_id(self, workflow_id):
@@ -333,7 +383,7 @@ class AIHubServer:
         This is used when a client requests to run a specific workflow
         """
         aihub_summaries = None
-        if AIHUB_COLD_WORKFLOWS and WORKFLOWS_AIHUB_SUMMARY is not None:
+        if AIHUB_COLD and WORKFLOWS_AIHUB_SUMMARY is not None:
             aihub_summaries = WORKFLOWS_AIHUB_SUMMARY
         else:
             aihub_summaries = self.retrieve_valid_workflows_aihub_summary()
@@ -365,7 +415,7 @@ class AIHubServer:
         workflow_copy = deepcopy(workflow)
         
         # get the workflow summary to validate the expose parameters
-        workflow_summary = self.retrieve_workflow_summary_by_id(request["workflow_id"])
+        workflow_summary = self.retrieve_valid_workflow_aihub_summary_from(workflow)
         if workflow_summary is None:
             return None, False, "Workflow summary not found, corrupted workflow?"
         
@@ -382,83 +432,57 @@ class AIHubServer:
             if expose_id not in request["expose"]:
                 return None, False, f"Missing parameter for expose id {expose_id}"
             
-            # get these metadata for the expose
-            # the index is used to set the value in the correct widget
-            # and whether it is a file input
-            # this matters for security reasons
-            widget_index = expose["data"].get("__widget_index", -1)
-            widget_is_file = expose["data"].get("__widget_is_file", False)
-            widget_is_multiple_files = expose["data"].get("__widget_is_file", False)
-            widget_is_seed = expose["data"].get("__widget_value_fixed", False)
-            widget_is_seed_value_fixed_index = expose["data"].get("__widget_value_fixed_index", -1)
-            
-            # so now we can validate the parameter value
-            value_to_set = request["expose"][expose_id]
-            value_to_set_fixed = None
-            # if it is a file input, we need to validate that the value is a valid file path
-            # within the socket_file_dir and prevent path traversal attacks
-            if widget_is_file and not widget_is_multiple_files:
-                # local_file is a special case, it must represent a local file path within a subdirectory that is
-                # specific for the given websocket session, so we must check that it is alphanumeric and does not contain any path traversal characters
-                local_file_path = request["expose"][expose_id]
-                local_file_path_unmodified = local_file_path
-                if not isinstance(local_file_path, str) or not local_file_path.isalnum():
-                    return None, False, f"Invalid local_file path for expose id {expose_id}, must be alphanumeric only"
-            
-                # if all checks pass, we need to convert the local_file_path to a full path
-                value_to_set = path.join(socket_file_dir, local_file_path)
-
-                # check that the file exists
-                if not path.exists(value_to_set) or not path.isfile(value_to_set):
-                    return None, False, f"File not found for expose id {expose_id} at file {local_file_path_unmodified}"
-            elif widget_is_file and widget_is_multiple_files:
-                # local_file is a special case, it must represent a local file path within a subdirectory that is
-                # specific for the given websocket session, so we must check that it is alphanumeric and does not contain any path traversal characters
-                local_file_paths = request["expose"][expose_id]
-
-                if not isinstance(local_file_paths, list):
-                    return None, False, f"Invalid local_files value for expose id {expose_id}, must be a list of alphanumeric file names"
-                
-                validated_file_paths = []
-                for local_file_path in local_file_paths:
-                    local_file_path_unmodified = local_file_path
-                    if not isinstance(local_file_path, str) or not local_file_path.isalnum():
-                        return None, False, f"Invalid local_file path for expose id {expose_id}, must be alphanumeric only"
-                    # if all checks pass, we need to convert the local_file_path to a full path
-                    full_path = path.join(socket_file_dir, local_file_path)
-
-                    # check that the file exists
-                    if not path.exists(full_path) or not path.isfile(full_path):
-                        return None, False, f"File not found for expose id {expose_id} at file {local_file_path_unmodified}"
+            for key, node in workflow_copy.items():
+                class_type = node.get("class_type", "")
+                if class_type.startswith("AIHubExpose") and node.get("inputs", {}).get("id", None) == expose_id:
+                    if class_type == "AIHubExposeImage" or class_type == "AIHubExposeFile":
+                        # local_file is a special case, it must represent a local file path within a subdirectory that is
+                        # specific for the given websocket session, so we must check that it is alphanumeric and does not contain any path traversal characters
+                        local_file_path = request["expose"][expose_id]
+                        local_file_path_unmodified = local_file_path
+                        #check that it is a string and that fits the A-Z a-z 0-9 _-.
+                        if not isinstance(local_file_path, str) or not re.match(r'^[A-Za-z_\-\.]+$', local_file_path):
+                            return None, False, f"Invalid local_file path for expose id {expose_id}, must be alphanumeric dots and dashes only not {local_file_path_unmodified}"
                     
-                    validated_file_paths.append(full_path)
+                        # if all checks pass, we need to convert the local_file_path to a full path
+                        value_to_set = path.join(socket_file_dir, local_file_path)
 
-                value_to_set = json.dumps(validated_file_paths)
-            if widget_is_seed:
-                value_to_set = value_to_set.value
-                value_to_set_fixed = value_to_set.value_fixed
+                        # TODO re-enable this check later
+                        # check that the file exists
+                        # if not path.exists(value_to_set) or not path.isfile(value_to_set):
+                        #    return None, False, f"File not found for expose id {expose_id} at file {local_file_path_unmodified}"
 
-            # set the value in the workflow copy
-            # these values are just set as they come
-            # get the node index to modify
-            node_index = expose.get("__node_index", -1)
-            if node_index == -1 or node_index >= len(workflow_copy["nodes"]):
-                return None, False, "Corrupted workflow, expose node index out of range"
-                
-            node = workflow_copy["nodes"][node_index]
-            widgetvalues = node.get("widgets_values", [])
-            if widget_index == -1 or widget_index >= len(widgetvalues):
-                return None, False, "Corrupted workflow, expose widget index out of range"
-                
-            widgetvalues[widget_index] = value_to_set
+                        workflow_copy[key]["inputs"]["local_file"] = value_to_set
+                    elif class_type == "AIHubExposeImageBatch":
+                        # local_file is a special case, it must represent a local file path within a subdirectory that is
+                        # specific for the given websocket session, so we must check that it is alphanumeric and does not contain any path traversal characters
+                        local_file_paths = request["expose"][expose_id]
 
-            if widget_is_seed:
-                if widget_is_seed_value_fixed_index == -1 or widget_is_seed_value_fixed_index >= len(widgetvalues):
-                    return None, False, "Corrupted workflow, expose seed fixed value index out of range"
-                widgetvalues[widget_is_seed_value_fixed_index] = value_to_set_fixed
+                        if not isinstance(local_file_paths, list):
+                            return None, False, f"Invalid local_files value for expose id {expose_id}, must be a list of file names"
+                        
+                        validated_file_paths = []
+                        for local_file_path in local_file_paths:
+                            local_file_path_unmodified = local_file_path
+                            if not isinstance(local_file_path, str) or not re.match(r'^[A-Za-z_\-\.]+$', local_file_path):
+                                return None, False, f"Invalid local_file path for expose id {expose_id}, must be alphanumeric dots and dashes only not {local_file_path_unmodified}"
+                            # if all checks pass, we need to convert the local_file_path to a full path
+                            full_path = path.join(socket_file_dir, local_file_path)
 
-            node["widgets_values"] = widgetvalues
-            workflow_copy["nodes"][node_index] = node
+                            # check that the file exists
+                            if not path.exists(full_path) or not path.isfile(full_path):
+                                return None, False, f"File not found for expose id {expose_id} at file {local_file_path_unmodified}"
+                            
+                            validated_file_paths.append(full_path)
+
+                        value_to_set = json.dumps(validated_file_paths)
+
+                        workflow_copy[key]["inputs"]["local_files"] = value_to_set
+                    elif class_type == "AIHubExposeSeed":
+                        workflow_copy[key]["inputs"]["value"] = request["expose"][expose_id]["value"]
+                        workflow_copy[key]["inputs"]["value_fixed"] = request["expose"][expose_id]["value_fixed"]
+                    else:
+                        workflow_copy[key]["inputs"]["value"] = request["expose"][expose_id]
         
         return workflow_copy, True, "Workflow validated and prepared"
     
@@ -484,7 +508,9 @@ class AIHubServer:
 
             await ws.send_json({
                 'type': 'INFO_LIST',
-                'workflows': self.retrieve_valid_workflows_aihub_summary_cleaned(),
+                'workflows': self.retrieve_valid_workflows_aihub_summary(),
+                'models': self.retrieve_checkpoints_cleaned(),
+                'loras': self.retrieve_loras_cleaned(),
             })
 
             # Asynchronously wait for and process messages from the client
@@ -500,8 +526,8 @@ class AIHubServer:
 
                         elif "check_exists" in data:
                             file_to_check = data["check_exists"]
-                            if not isinstance(file_to_check, str) or not file_to_check.isalnum():
-                                await ws.send_json({'type': 'ERROR', 'message': 'Invalid file name to check, must be alphanumeric only'})
+                            if not isinstance(file_to_check, str) or not re.match(r'^[A-Za-z_\-\.]+$', file_to_check):
+                                await ws.send_json({'type': 'ERROR', 'message': 'Invalid file name to check, must be alphanumeric dots and dashes only'})
                                 continue
                             full_path = path.join(socket_file_dir, file_to_check)
                             exists = path.exists(full_path) and path.isfile(full_path)
@@ -541,7 +567,7 @@ class AIHubServer:
                             await ws.send_json({
                                 'type': 'WORKFLOW_AWAIT',
                                 'id': run_id,
-                                'workflow_id': data.workflow_id,
+                                'workflow_id': data["workflow_id"],
                                 'before_this': len(self.WORKFLOW_REQUEST_QUEUE) - 1
                             })
 
@@ -581,16 +607,16 @@ class AIHubServer:
             with self.QUEUE_LOCK:
                 # We first find the keys of the prompts to remove.
                 for i in range(0, len(self.WORKFLOW_REQUEST_QUEUE)):
-                    if self.WORKFLOW_REQUEST_QUEUE[i].ws == ws:
+                    if self.WORKFLOW_REQUEST_QUEUE[i]["ws"] == ws:
                         del self.WORKFLOW_REQUEST_QUEUE[i]
                 
                 for i in range(0, len(self.WORKFLOW_REQUEST_QUEUE)):
-                    self.WORKFLOW_REQUEST_QUEUE[i].ws.send_json({
+                    self.WORKFLOW_REQUEST_QUEUE[i]["ws"].send_json({
                         'status': 'WORKFLOW_AWAIT',
                         'before_this': i
                     })
 
-                if self.CURRENTLY_RUNNING and self.CURRENTLY_RUNNING.ws == ws:
+                if self.CURRENTLY_RUNNING and self.CURRENTLY_RUNNING["ws"] == ws:
                     self.cancel_current_run()
 
             if not AIHUB_PERSIST_TEMPFILES:
@@ -659,12 +685,13 @@ class AIHubServer:
 
     def process_messages(self):
         while True:
+            needs_awaiting = True
             with self.QUEUE_LOCK:
                 if len(self.WORKFLOW_REQUEST_QUEUE) > 0 and self.CURRENTLY_RUNNING is None:
                     self.CURRENTLY_RUNNING = self.WORKFLOW_REQUEST_QUEUE.pop()
 
                     for i in range(0, len(self.WORKFLOW_REQUEST_QUEUE)):
-                        self.WORKFLOW_REQUEST_QUEUE[i].ws.send_json({
+                        self.WORKFLOW_REQUEST_QUEUE[i]["ws"].send_json({
                             'status': 'WORKFLOW_AWAIT',
                             'id': self.WORKFLOW_REQUEST_QUEUE[i].id,
                             'workflow_id': self.WORKFLOW_REQUEST_QUEUE[i].request.workflow_id,
@@ -672,16 +699,21 @@ class AIHubServer:
                         })
             
                     self.process_current()
+                    needs_awaiting = False
 
-            # recheck every 100ms
-            sleep(0.1)
+            # recheck every 100ms if we didnt process anything
+            if needs_awaiting:
+                sleep(0.1)
 
     def cancel_current_run(self):
-        # TODO cancelling the current running workflow operation
+        # run the workflow using the ComfyUI API with the python function call
+
         pass
 
     def process_current(self):
-        #TODO do processing of the current queued workflow operation
+        print("Processing current workflow...")
+        valid = asyncio.run(validate_prompt(self.CURRENTLY_RUNNING["id"], self.CURRENTLY_RUNNING["workflow"], None))
+        print(valid)
         pass
 
     async def send_binary_data(self, ws, binary_data, data_type, action_data):

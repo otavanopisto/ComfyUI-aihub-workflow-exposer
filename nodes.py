@@ -93,6 +93,44 @@ class AIHubExposeInteger:
             raise ValueError(f"Error: {id} should be less or equal to {max}")
         return (value,)
     
+class AIHubExposeSteps:
+    """
+    A utility node for exposing a configurable integer meant for using as steps, the difference
+    between using a standard integer is that this one is able to default to whatever the model
+    being used has as default steps
+
+    Note that this defaulting is a client side feature, this node just exposes an integer
+    """
+
+    CATEGORY = "aihub/expose"
+    FUNCTION = "get_exposed_steps"
+
+    # The RETURN_TYPES defines the data types of the node's outputs.
+    # It returns a single integer, which is the value of the "default" input.
+    RETURN_TYPES = ("INT",)
+
+    # The INPUT_TYPES method is where we define all the properties that the
+    # user can edit. Each property from your data structure becomes a dictionary key.
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "id": ("STRING", {"default": "exposed_integer", "tooltip": "A unique custom id for this workflow (it should be unique)"}),
+                "label": ("STRING", {"default": "Exposed Integer", "tooltip": "This is the label that will appear in the field"}),
+                "tooltip": ("STRING", {"default": "", "tooltip": "An optional tooltip"}),
+                "value": ("INT", {"default": 10}),
+                "advanced": ("BOOLEAN", {"default": False, "tooltip": "If set to true, it will make this option be hidden under advanced options for this workflow"}),
+                "index": ("INT", {"default": 0, "tooltip": "this value is used for sorting the input fields when displaying, lower values will appear first"}),
+            }
+        }
+
+    def get_exposed_steps(self, label, tooltip, value, description, advanced, index):
+        if (value < 0):
+            raise ValueError(f"Error: {id} should be greater or equal to {0}")
+        if (value > 150):
+            raise ValueError(f"Error: {id} should be less or equal to {150}")
+        return (value,)
+    
 class AIHubExposeConfigInteger:
     """
     A utility node for exposing an integer from the project config.json
@@ -147,6 +185,39 @@ class AIHubExposeFloat:
             raise ValueError(f"Error: {id} should be greater or equal to {min}")
         if (value > max):
             raise ValueError(f"Error: {id} should be less or equal to {max}")
+        return (value,)
+    
+class AIHubExposeCfg:
+    """
+    A utility node for exposing a configurable float for cfg
+    the difference between using a standard float is that this one is able to default
+    to whatever the model being used has as default cfg
+
+    Note that this defaulting is a client side feature, this node just exposes a float
+    """
+    
+    CATEGORY = "aihub/expose"
+    FUNCTION = "get_exposed_cfg"
+    RETURN_TYPES = ("FLOAT",)
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "id": ("STRING", {"default": "float", "tooltip": "A unique custom id for this workflow."}),
+                "label": ("STRING", {"default": "Float", "tooltip": "This is the label that will appear in the field."}),
+                "tooltip": ("STRING", {"default": "", "tooltip": "An optional tooltip."}),
+                "value": ("FLOAT", {"default": 3.0}),
+                "advanced": ("BOOLEAN", {"default": False, "tooltip": "If set to true, it will make this option be hidden under advanced options for this workflow."}),
+                "index": ("INT", {"default": 0, "tooltip": "This value is used for sorting the input fields when displaying; lower values will appear first."}),
+            }
+        }
+
+    def get_exposed_cfg(self, id, label, tooltip, value, advanced, index):
+        if (value < 0.0):
+            raise ValueError(f"Error: {id} should be greater or equal to {0.0}")
+        if (value > 100.0):
+            raise ValueError(f"Error: {id} should be less or equal to {100.0}")
         return (value,)
     
 class AIHubExposeConfigFloat:
@@ -394,18 +465,18 @@ class AIHubExposeImage:
             },
         }
 
-    def get_exposed_image(self, id, label, tooltip, type, value_pos_x, value_pos_y, value_pos_z, value=None, local_filename=None):
+    def get_exposed_image(self, id, label, tooltip, type, value_pos_x, value_pos_y, value_pos_z, value=None, local_file=None):
         image = None
         if value is not None:
             image = value
-        elif local_filename is not None and os.path.exists(local_filename):
+        elif local_file is not None and os.path.exists(local_file):
             # Instantiate a LoadImage node and use its logic to load the file
             loader = LoadImage()
             # The load_image method returns a tuple, so we need to get the first element
-            loaded_image_tuple = loader.load_image(local_filename)
+            loaded_image_tuple = loader.load_image(local_file)
             image = loaded_image_tuple[0]
         else:
-            raise ValueError("You must specify either local_filename (hidden) or the value of the image for this node to function")
+            raise ValueError("You must specify either local_file or the value of the image for this node to function")
 
         _, height, width, _ = image.shape
         
@@ -466,11 +537,11 @@ class AIHubExposeImageBatch:
             },
             "optional": {
                 "values": ("IMAGE",),
-                "local_filenames": ("STRING", {"default": "[]"}),
+                "local_files": ("STRING", {"default": "[]"}),
             }
         }
 
-    def get_exposed_image_batch(self, id, label, tooltip, type, maxlen, values=None, local_filenames=None):
+    def get_exposed_image_batch(self, id, label, tooltip, type, maxlen, values=None, local_files=None):
         image_batch = None
         if values is not None:
             # If an image batch is passed from a connected node, use it directly.
@@ -478,13 +549,13 @@ class AIHubExposeImageBatch:
             if image_batch.shape[0] > maxlen:
                 raise ValueError(f"Error: {id} contains too many files")
             
-        elif local_filenames:
-            # If a local_filenames string is provided, attempt to load the images.
+        elif local_files:
+            # If a local_files string is provided, attempt to load the images.
             try:
                 # Parse the JSON string into a Python list of filenames.
-                filenames = json.loads(local_filenames)
+                filenames = json.loads(local_files)
                 if not isinstance(filenames, list):
-                    raise ValueError("Error: local_filenames is not a valid JSON string encoding an array")
+                    raise ValueError("Error: local_files is not a valid JSON string encoding an array")
                 if len(filenames) > maxlen:
                     raise ValueError(f"Error: {id} contains too many files")
                 
@@ -503,10 +574,10 @@ class AIHubExposeImageBatch:
                 image_batch = torch.cat(loaded_images, dim=0)
             except json.JSONDecodeError:
                 # Handle invalid JSON input gracefully.
-                raise ValueError("Error: local_filenames is not a valid JSON string encoding an array")
+                raise ValueError("Error: local_files is not a valid JSON string encoding an array")
         else:
             # Return an empty placeholder if no input is provided.
-            raise ValueError("You must specify either local_filenames (hidden) or the values of the images for this node to function")
+            raise ValueError("You must specify either local_files or the values of the images for this node to function")
         
         return (image_batch,)
 
