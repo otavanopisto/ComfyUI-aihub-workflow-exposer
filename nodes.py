@@ -469,12 +469,16 @@ class AIHubExposeImage:
         image = None
         if value is not None:
             image = value
-        elif local_file is not None and os.path.exists(local_file):
-            # Instantiate a LoadImage node and use its logic to load the file
-            loader = LoadImage()
-            # The load_image method returns a tuple, so we need to get the first element
-            loaded_image_tuple = loader.load_image(local_file)
-            image = loaded_image_tuple[0]
+        elif local_file is not None:
+            if (os.path.exists(local_file)):
+                # Instantiate a LoadImage node and use its logic to load the file
+                loader = LoadImage()
+                # The load_image method returns a tuple, so we need to get the first element
+                loaded_image_tuple = loader.load_image(local_file)
+                image = loaded_image_tuple[0]
+            else:
+                filenameOnly = os.path.basename(local_file)
+                raise ValueError(f"Error: Image file not found: {filenameOnly}")
         else:
             raise ValueError("You must specify either local_file or the value of the image for this node to function")
 
@@ -568,7 +572,8 @@ class AIHubExposeImageBatch:
                         # Load each image and append it to the list.
                         loaded_images.append(loader.load_image(filename)[0])
                     else:
-                        raise ValueError(f"Error: Image file not found: {filename}")
+                        filenameOnly = os.path.basename(filename)
+                        raise ValueError(f"Error: Image file not found: {filenameOnly}")
                 
                 # Concatenate all the images into a single batch tensor.
                 image_batch = torch.cat(loaded_images, dim=0)

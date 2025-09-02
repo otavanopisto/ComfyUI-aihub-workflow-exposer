@@ -7,6 +7,8 @@ from copy import deepcopy
 import tempfile
 from time import sleep
 import re
+from functools import partial
+from nodes import interrupt_processing
 
 from aiohttp import web
 from server import PromptServer
@@ -65,8 +67,61 @@ class AIHubServer:
         # create folder ../../aihub/models if it doesn't exist
         if not path.exists(self.models_dir):
             makedirs(self.models_dir)
+
+        originalQueueUpdatedFn = PromptServer.instance.queue_updated
+        PromptServer.instance.queue_updated = partial(self.queue_updated_override, originalQueueUpdatedFn)
         
         return
+    
+    def queue_updated_override(self, originalFn):
+        # this should still have the self of the PromptServer instance because it is a bound method
+        originalFn()
+
+        queue_info = PromptServer.instance.get_queue_info()
+        task_completed = False
+        if (queue_info is not None and "exec_info" in queue_info and "queue_remaining" in queue_info["exec_info"]):
+            queue_remaining = queue_info["exec_info"]["queue_remaining"]
+            task_completed = queue_remaining == 0
+
+        # {'exec_info': {'queue_remaining': 0}}
+        prompt_id_to_check = self.CURRENTLY_RUNNING["id"] if self.CURRENTLY_RUNNING is not None else None
+        if (prompt_id_to_check is not None and task_completed):
+            prompt_info = PromptServer.instance.prompt_queue.get_history(prompt_id=prompt_id_to_check)
+
+            if prompt_info and prompt_id_to_check in prompt_info:
+                prompt_specific_data = prompt_info[prompt_id_to_check]
+                status = prompt_specific_data["status"]
+
+                if ("status_str" in status and status["status_str"] == "error"):
+                    error_message = "Unknown error"
+                    if "messages" in status:
+                        error_message = ", ".join([data.get('exception_message', "").replace("\n", "") 
+                            for v, data in status['messages'] 
+                            if v == 'execution_error'])
+                    asyncio.run(self.CURRENTLY_RUNNING["ws"].send_json({
+                        'type': 'WORKFLOW_FINISHED',
+                        'id': prompt_id_to_check,
+                        'workflow_id': self.CURRENTLY_RUNNING['workflow_id'],
+                        'error': True,
+                        'error_message': error_message,
+                    }))
+                    self.CURRENTLY_RUNNING = None
+                else:
+                    asyncio.run(self.CURRENTLY_RUNNING["ws"].send_json({
+                        'type': 'WORKFLOW_FINISHED',
+                        'id': prompt_id_to_check,
+                        'workflow_id': self.CURRENTLY_RUNNING['workflow_id'],
+                        'error': False,
+                    }))
+                    self.CURRENTLY_RUNNING = None
+        
+        if (task_completed):
+            if (self.CURRENTLY_RUNNING is not None):
+                print("Warning: queue remaining is 0 but currently running is not None")
+                return
+                
+            self.CURRENTLY_RUNNING = None
+            asyncio.run(self.process_next_workflow_in_queue())
     
     def retrieve_checkpoints_raw(self):
         """
@@ -520,11 +575,18 @@ class AIHubServer:
                     try:
                         data = json.loads(msg.data)
 
-                        if 'ping' in data:
+                        if not isinstance(data, dict):
+                            await ws.send_json({'type': 'ERROR', 'message': 'Invalid JSON format, must be an object'})
+                            continue
+                        elif 'type' not in data:
+                            await ws.send_json({'type': 'ERROR', 'message': 'Missing request type in JSON'})
+                            continue
+
+                        elif 'ping' in data and data["type"] == "PING":
                             await ws.send_json({'type': 'PONG', 'value': data["ping"]})
                             self.LAST_PING_QUEUE_VALUE = str(data["ping"])
 
-                        elif "check_exists" in data:
+                        elif "check_exists" in data and data["type"] == "FILE_OPERATION":
                             file_to_check = data["check_exists"]
                             if not isinstance(file_to_check, str) or not re.match(r'^[A-Za-z_\-\.]+$', file_to_check):
                                 await ws.send_json({'type': 'ERROR', 'message': 'Invalid file name to check, must be alphanumeric dots and dashes only'})
@@ -534,7 +596,7 @@ class AIHubServer:
                             await ws.send_json({'type': 'CHECK_EXISTS_STATUS', 'file': file_to_check, 'exists': exists})
                             continue
 
-                        elif "binary_header" in data:
+                        elif "binary_header" in data and data["type"] == "FILE_OPERATION":
                             new_header = data["binary_header"]
                             if not isinstance(new_header, dict) or "type" not in new_header or "filename" not in new_header or not new_header["filename"].isalnum():
                                 await ws.send_json({'type': 'ERROR', 'message': 'Invalid binary header'})
@@ -542,10 +604,43 @@ class AIHubServer:
                             PREVIOUS_BINARY_HEADER = data["binary_header"]
                             continue
 
-                        elif 'workflow_id' not in data:
+                        elif 'cancel' in data and data["type"] == "WORKFLOW_OPERATION":
+                            what_to_cancel = data['cancel']
+                            if what_to_cancel == "all":
+                                if (self.CURRENTLY_RUNNING is not None and self.CURRENTLY_RUNNING["ws"] == ws):
+                                    self.cancel_current_run()
+
+                                with self.QUEUE_LOCK:
+                                    for i in range(0, len(self.WORKFLOW_REQUEST_QUEUE)):
+                                        if self.WORKFLOW_REQUEST_QUEUE[i]["ws"] == ws:
+                                            del self.WORKFLOW_REQUEST_QUEUE[i]
+
+                                    for i in range(0, len(self.WORKFLOW_REQUEST_QUEUE)):
+                                        self.WORKFLOW_REQUEST_QUEUE[i]["ws"].send_json({
+                                            'type': 'WORKFLOW_AWAIT',
+                                            'id': self.WORKFLOW_REQUEST_QUEUE[i]["id"],
+                                            'workflow_id': self.WORKFLOW_REQUEST_QUEUE[i]["workflow_id"],
+                                            'before_this': i
+                                        })
+                            elif type(what_to_cancel) is str:
+                                with self.QUEUE_LOCK:
+                                    for i in range(0, len(self.WORKFLOW_REQUEST_QUEUE)):
+                                        if self.WORKFLOW_REQUEST_QUEUE[i]["id"] == what_to_cancel and self.WORKFLOW_REQUEST_QUEUE[i]["ws"] == ws:
+                                            del self.WORKFLOW_REQUEST_QUEUE[i]
+                                            break
+                            
+                                    for i in range(0, len(self.WORKFLOW_REQUEST_QUEUE)):
+                                        await self.WORKFLOW_REQUEST_QUEUE[i]["ws"].send_json({
+                                            'type': 'WORKFLOW_AWAIT',
+                                            'id': self.WORKFLOW_REQUEST_QUEUE[i]["id"],
+                                            'workflow_id': self.WORKFLOW_REQUEST_QUEUE[i]["workflow_id"],
+                                            'before_this': i
+                                        })
+
+                        elif 'workflow_id' not in data and data["type"] == "WORKFLOW_OPERATION":
                             await ws.send_json({'type': 'ERROR', 'message': 'Missing workflow_id to execute'})
 
-                        else:
+                        elif 'workflow_id' in data and data["type"] == "WORKFLOW_OPERATION":
                             # validate before queueing
                             validated_workflow, valid, message = self.validate_and_process_workflow_request(socket_file_dir, data)
                             if not valid:
@@ -560,6 +655,7 @@ class AIHubServer:
                                     'request': data,
                                     'ws': ws,
                                     'workflow': validated_workflow,
+                                    'workflow_id': data['workflow_id'],
                                     'file_dir': socket_file_dir,
                                 })
 
@@ -570,6 +666,12 @@ class AIHubServer:
                                 'workflow_id': data["workflow_id"],
                                 'before_this': len(self.WORKFLOW_REQUEST_QUEUE) - 1
                             })
+
+                            if self.CURRENTLY_RUNNING is None:
+                                asyncio.create_task(self.process_next_workflow_in_queue())
+
+                        else:
+                            await ws.send_json({'type': 'ERROR', 'message': 'Unknown request type'})
 
                     except json.JSONDecodeError:
                         await ws.send_json({'type': 'ERROR', 'message': 'Invalid JSON'})
@@ -612,7 +714,9 @@ class AIHubServer:
                 
                 for i in range(0, len(self.WORKFLOW_REQUEST_QUEUE)):
                     self.WORKFLOW_REQUEST_QUEUE[i]["ws"].send_json({
-                        'status': 'WORKFLOW_AWAIT',
+                        'type': 'WORKFLOW_AWAIT',
+                        'id': self.WORKFLOW_REQUEST_QUEUE[i]["id"],
+                        'workflow_id': self.WORKFLOW_REQUEST_QUEUE[i]["workflow_id"],
                         'before_this': i
                     })
 
@@ -680,49 +784,58 @@ class AIHubServer:
             # Wait for the server to confirm it has started
             SERVER_RUNNING_FLAG.wait(timeout=10)
 
-            threading.Thread(target=self.process_messages, daemon=True).start()
-            print("Process of messages thread started.")
+            #threading.Thread(target=self.process_messages, daemon=True).start()
+            #print("Process of messages thread started.")
 
-    def process_messages(self):
-        while True:
-            needs_awaiting = True
-            with self.QUEUE_LOCK:
-                if len(self.WORKFLOW_REQUEST_QUEUE) > 0 and self.CURRENTLY_RUNNING is None:
-                    self.CURRENTLY_RUNNING = self.WORKFLOW_REQUEST_QUEUE.pop()
+    async def process_next_workflow_in_queue(self):
+        with self.QUEUE_LOCK:
+            if len(self.WORKFLOW_REQUEST_QUEUE) > 0 and self.CURRENTLY_RUNNING is None:
+                self.CURRENTLY_RUNNING = self.WORKFLOW_REQUEST_QUEUE.pop()
 
-                    for i in range(0, len(self.WORKFLOW_REQUEST_QUEUE)):
-                        self.WORKFLOW_REQUEST_QUEUE[i]["ws"].send_json({
-                            'status': 'WORKFLOW_AWAIT',
-                            'id': self.WORKFLOW_REQUEST_QUEUE[i].id,
-                            'workflow_id': self.WORKFLOW_REQUEST_QUEUE[i].request.workflow_id,
-                            'before_this': i
-                        })
+                for i in range(0, len(self.WORKFLOW_REQUEST_QUEUE)):
+                    await self.WORKFLOW_REQUEST_QUEUE[i]["ws"].send_json({
+                        'type': 'WORKFLOW_AWAIT',
+                        'id': self.WORKFLOW_REQUEST_QUEUE[i]["id"],
+                        'workflow_id': self.WORKFLOW_REQUEST_QUEUE[i].request["workflow_id"],
+                        'before_this': i
+                    })
             
-                    self.process_current()
-                    needs_awaiting = False
-
-            # recheck every 100ms if we didnt process anything
-            if needs_awaiting:
-                sleep(0.1)
+                await self.process_current()
 
     def cancel_current_run(self):
-        # run the workflow using the ComfyUI API with the python function call
+        interrupt_processing()
 
-        pass
-
-    def process_current(self):
+    async def process_current(self):
+        if not self.CURRENTLY_RUNNING:
+            return
+        
         print("Processing current workflow...")
-        valid = asyncio.run(validate_prompt(self.CURRENTLY_RUNNING["id"], self.CURRENTLY_RUNNING["workflow"], None))
-        print(valid)
-        pass
+        valid = await validate_prompt(self.CURRENTLY_RUNNING["id"], self.CURRENTLY_RUNNING["workflow"], None)
+        
+        if valid[0]:
+            outputs_to_execute = valid[2]
+            number = PromptServer.instance.number
+            PromptServer.instance.number += 1
+            PromptServer.instance.prompt_queue.put((number, self.CURRENTLY_RUNNING["id"], self.CURRENTLY_RUNNING["workflow"], {}, outputs_to_execute))
+        else:
+            await self.send_json(self.CURRENTLY_RUNNING["ws"], {
+                'type': 'ERROR',
+                'workflow_id': self.CURRENTLY_RUNNING["request"]["workflow_id"],
+                'id': self.CURRENTLY_RUNNING["id"],
+                'node_errors': valid[3],
+                'message': f'Error validating workflow: {valid[1]}'
+            })
+            self.CURRENTLY_RUNNING = None
 
-    async def send_binary_data(self, ws, binary_data, data_type, action_data):
+    async def send_binary_data(self, workflow_id, id, ws, binary_data, data_type, action_data):
         """
         Sends binary data (e.g., images, files) to the client via websocket.
         """
         # Send a header message to indicate incoming binary data
         await ws.send_json({
             "type": "FILE",
+            'workflow_id': workflow_id,
+            'id': id,
             "type": data_type,
             "action": action_data,
         })
@@ -730,16 +843,18 @@ class AIHubServer:
         await ws.send_bytes(binary_data)
 
     async def send_binary_data_to_current_client(self, binary_data, data_type, action_data):
-        return await self.send_binary_data(self.CURRENTLY_RUNNING["ws"], binary_data, data_type, action_data)
+        return await self.send_binary_data(self.CURRENTLY_RUNNING["workflow_id"], self.CURRENTLY_RUNNING["id"], self.CURRENTLY_RUNNING["ws"], binary_data, data_type, action_data)
     
-    async def send_json(self, ws, data):
+    async def send_json(self, workflow_id, id, ws, data):
+        data["workflow_id"] = workflow_id
+        data["id"] = id
         """
         Sends JSON data to the client via websocket.
         """
         await ws.send_json(data)
 
     async def send_json_to_current_client(self, data):
-        return await self.send_json(self.CURRENTLY_RUNNING["ws"], data)
+        return await self.send_json(self.CURRENTLY_RUNNING["workflow_id"], self.CURRENTLY_RUNNING["id"], self.CURRENTLY_RUNNING["ws"], data)
     
     async def send_status_message_to_current_client(self, status_message, extra_data=None):
         data = {
