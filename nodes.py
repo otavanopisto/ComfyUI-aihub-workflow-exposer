@@ -38,7 +38,7 @@ class AIHubWorkflowController:
                 "label": ("STRING", {"tooltip": "The label for the workflow to be used", "default": "my_custom_workflow"}),
                 "description": ("STRING", {"tooltip": "The noise to use.", "multiline": True, "default": ""}),
                 "category": ("STRING", {"tooltip": "A path to be used within the menu, separated by /", "default": "my_custom_workflow"}),
-                "context": (["image", "video", "audio"], {"tooltip": "The context of this workflow", "default": "image"}),
+                "context": (["image", "video", "audio", "3d", "text"], {"tooltip": "The context of this workflow", "default": "image"}),
                 "project_type": ("STRING", {"tooltip": "The project type is an arbitrary string that limits in which context the workflow can be used"}),
                 "project_type_init": ("BOOLEAN", {"tooltip": "This workflow can initialize the given project type, provided an empty project folder"})
                 # eg. project types I think about implementing, ltxv, sdxl-character
@@ -151,8 +151,8 @@ class AIHubExposeConfigInteger:
             }
         }
 
-    def get_exposed_int(self, field, value):
-        return (value,)
+    def get_exposed_int(self, field, value, default):
+        return (value if value is not None else default,)
     
 class AIHubExposeFloat:
     """
@@ -240,8 +240,8 @@ class AIHubExposeConfigFloat:
             }
         }
 
-    def get_exposed_float(self, field, value):
-        return (value,)
+    def get_exposed_float(self, field, value, default):
+        return (value if value is not None else default,)
     
 class AIHubExposeBoolean:
     """
@@ -288,8 +288,8 @@ class AIHubExposeConfigBoolean:
             }
         }
 
-    def get_exposed_boolean(self, field, value):
-        return (value,)
+    def get_exposed_boolean(self, field, value, default):
+        return (value if value is not None else default,)
     
 class AIHubExposeString:
     """
@@ -310,6 +310,7 @@ class AIHubExposeString:
                 "minlen": ("INT", {"default": 0}),
                 "maxlen": ("INT", {"default": 1000}),
                 "value": ("STRING", {"default": ""}),
+                "multiline": ("BOOLEAN", {"default": False, "tooltip": "If set to true, this field will allow multiline input."}),
                 "advanced": ("BOOLEAN", {"default": False, "tooltip": "If set to true, this option will be hidden under advanced options for this workflow."}),
                 "index": ("INT", {"default": 0, "tooltip": "This value is used for sorting the input fields when displaying; lower values will appear first."}),
             }
@@ -342,8 +343,8 @@ class AIHubExposeConfigString:
             }
         }
 
-    def get_exposed_string(self, field, value):
-        return (value,)
+    def get_exposed_string(self, field, value, default):
+        return (value if value is not None else default,)
 
 class AIHubExposeStringSelection:
     CATEGORY = "aihub/expose"
