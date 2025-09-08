@@ -446,7 +446,7 @@ class AIHubExposeImage:
     FUNCTION = "get_exposed_image"
     
     RETURN_TYPES = ("IMAGE", "INT", "INT", "INT", "INT", "INT",)
-    RETURN_NAMES = ("IMAGE", "POS_X", "POS_Y", "POS_Z", "WIDTH", "HEIGHT",)
+    RETURN_NAMES = ("IMAGE", "POS_X", "POS_Y", "LAYER_ID", "WIDTH", "HEIGHT",)
 
     @classmethod
     def INPUT_TYPES(s):
@@ -455,10 +455,16 @@ class AIHubExposeImage:
                 "id": ("STRING", {"default": "exposed_image", "tooltip": "A unique custom ID for this workflow."}),
                 "label": ("STRING", {"default": "Image", "tooltip": "This is the label that will appear in the field."}),
                 "tooltip": ("STRING", {"default": "", "tooltip": "An optional tooltip"}),
-                "type": (["current_layer", "merged_image_below_current_layer", "merged_image_until_current_layer", "merged_image", "previous_layer", "upload"], {"default": "upload", "tooltip": "The source of the image"}),
+                "type": ([
+                    "current_layer",
+                    "merged_image",
+                    "merged_image_without_current_layer",
+                    "upload",
+                ], {"default": "upload", "tooltip": "The source of the image"}),
                 "value_pos_x": ("INT", {"default": 0, "tooltip": "The X position of the layer in the canvas"}),
                 "value_pos_y": ("INT", {"default": 0, "tooltip": "The Y position of the layer in the canvas"}),
-                "value_pos_z": ("INT", {"default": 0, "tooltip": "The Z (Layer) position of the image."}),
+                "layer_id": ("STRING", {"default": "", "tooltip": "The ID of the layer to use, only given if type is current_layer or previous_layer"}),
+                "index": ("INT", {"default": 0, "tooltip": "This value is used for sorting the input fields when displaying; lower values will appear first."}),
             },
             "optional": {
                 "value": ("IMAGE",),
@@ -466,7 +472,7 @@ class AIHubExposeImage:
             },
         }
 
-    def get_exposed_image(self, id, label, tooltip, type, value_pos_x, value_pos_y, value_pos_z, value=None, local_file=None):
+    def get_exposed_image(self, id, label, tooltip, type, value_pos_x, value_pos_y, layer_id, index, value=None, local_file=None):
         image = None
         if value is not None:
             image = value
@@ -485,14 +491,14 @@ class AIHubExposeImage:
 
         _, height, width, _ = image.shape
         
-        return (image, value_pos_x, value_pos_y, value_pos_z, width, height,)
+        return (image, value_pos_x, value_pos_y, layer_id, width, height,)
     
 class AIHubExposeImageInfoOnly:
     CATEGORY = "aihub/expose"
     FUNCTION = "get_exposed_image_info_only"
     
     RETURN_TYPES = ("INT", "INT", "INT", "INT", "INT",)
-    RETURN_NAMES = ("POS_X", "POS_Y", "POS_Z", "WIDTH", "HEIGHT",)
+    RETURN_NAMES = ("POS_X", "POS_Y", "LAYER_ID", "WIDTH", "HEIGHT",)
 
     @classmethod
     def INPUT_TYPES(s):
@@ -501,10 +507,11 @@ class AIHubExposeImageInfoOnly:
                 "id": ("STRING", {"default": "exposed_image", "tooltip": "A unique custom ID for this workflow."}),
                 "label": ("STRING", {"default": "Image", "tooltip": "This is the label that will appear in the field."}),
                 "tooltip": ("STRING", {"default": "", "tooltip": "An optional tooltip"}),
-                "type": (["current_layer", "merged_image_below_current_layer", "merged_image_until_current_layer", "merged_image", "previous_layer", "upload"], {"default": "upload", "tooltip": "The source of the image"}),
+                "type": (["current_layer", "merged_image", "merged_image_without_current_layer", "upload"], {"default": "upload", "tooltip": "The source of the image"}),
                 "value_pos_x": ("INT", {"default": 0, "tooltip": "The X position of the layer in the canvas"}),
                 "value_pos_y": ("INT", {"default": 0, "tooltip": "The Y position of the layer in the canvas"}),
-                "value_pos_z": ("INT", {"default": 0, "tooltip": "The Z (Layer) position of the image."}),
+                "layer_id": ("INT", {"default": 0, "tooltip": "The Z (Layer) position of the image."}),
+                "index": ("INT", {"default": 0, "tooltip": "This value is used for sorting the input fields when displaying; lower values will appear first."}),
             },
             "optional": {
                 "value": ("IMAGE",),
@@ -513,7 +520,7 @@ class AIHubExposeImageInfoOnly:
             }
         }
 
-    def get_exposed_image_info_only(self, id, label, tooltip, type, value_pos_x, value_pos_y, value_pos_z, value=None, value_width=1024, value_height=1024):
+    def get_exposed_image_info_only(self, id, label, tooltip, type, value_pos_x, value_pos_y, layer_id, index, value=None, value_width=1024, value_height=1024):
         image = None
         height = value_height
         width = value_width
@@ -521,7 +528,7 @@ class AIHubExposeImageInfoOnly:
             image = value
             _, height, width, _ = image.shape
         
-        return (value_pos_x, value_pos_y, value_pos_z, width, height,)
+        return (value_pos_x, value_pos_y, layer_id, width, height,)
     
 class AIHubExposeImageBatch:
     CATEGORY = "aihub/expose"
@@ -539,6 +546,7 @@ class AIHubExposeImageBatch:
                 "tooltip": ("STRING", {"default": "", "tooltip": "An optional tooltip"}),
                 "type": (["new_images", "all_reference_frames", "new_reference_frames"]),
                 "maxlen": ("INT", {"default": 1000}),
+                "index": ("INT", {"default": 0, "tooltip": "This value is used for sorting the input fields when displaying; lower values will appear first."}),
             },
             "optional": {
                 "values": ("IMAGE",),
@@ -546,7 +554,7 @@ class AIHubExposeImageBatch:
             }
         }
 
-    def get_exposed_image_batch(self, id, label, tooltip, type, maxlen, values=None, local_files=None):
+    def get_exposed_image_batch(self, id, label, tooltip, type, maxlen, index, values=None, local_files=None):
         image_batch = None
         if values is not None:
             # If an image batch is passed from a connected node, use it directly.
@@ -632,12 +640,12 @@ class AIHubActionNewLayer:
                 "image": ("IMAGE",),
                 "pos_x": ("INT", {"default": 0, "tooltip": "The X position of the layer in the canvas"}),
                 "pos_y": ("INT", {"default": 0, "tooltip": "The Y position of the layer in the canvas"}),
-                "pos_z": ("INT", {"default": 0, "tooltip": "The Z (Layer) position of the image."}),
-                "replace": ("BOOLEAN", {"default": False, "tooltip": "If true, it will replace the layer at the given Z position, otherwise it will insert a new layer at that position"}),
+                "reference_layer_id": ("STRING", {"default": "", "tooltip": "The Layer ID regarding the position of the image, the meta-values __first__ and __last__ can be used to refer to the first and last layer respectively"}),
+                "reference_layer_action": (["REPLACE", "NEW_BEFORE", "NEW_AFTER"], {"default": "NEW_AFTER", "tooltip": "Specify the action to execute at the given layer id"}),
             }
         }
     
-    def run_action(image, pos_x, pos_y, pos_z, replace):
+    def run_action(image, pos_x, pos_y, reference_layer_id, reference_layer_action):
         image = image[0]
         i = 255. * image.cpu().numpy()
         img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
@@ -649,8 +657,8 @@ class AIHubActionNewLayer:
                 "type": "image/png",
                 "pos_x": pos_x,
                 "pos_y": pos_y,
-                "pos_z": pos_z,
-                "replace": replace,
+                "reference_layer_id": reference_layer_id,
+                "reference_layer_action": reference_layer_action,
             },
         )
 

@@ -9,6 +9,7 @@ from time import sleep
 import re
 from functools import partial
 from nodes import interrupt_processing
+import comfy.samplers
 
 from aiohttp import web
 from server import PromptServer
@@ -491,9 +492,12 @@ class AIHubServer:
                 class_type = node.get("class_type", "")
                 if class_type.startswith("AIHubExpose") and node.get("inputs", {}).get("id", None) == expose_id:
                     if class_type == "AIHubExposeImage" or class_type == "AIHubExposeFile":
+                        if not isinstance(request["expose"][expose_id], dict) or "local_file" not in request["expose"][expose_id]:
+                            return None, False, f"Invalid parameter for expose id {expose_id}, must be an object with a local_file property"
+
                         # local_file is a special case, it must represent a local file path within a subdirectory that is
                         # specific for the given websocket session, so we must check that it is alphanumeric and does not contain any path traversal characters
-                        local_file_path = request["expose"][expose_id]
+                        local_file_path = request["expose"][expose_id]["local_file"]
                         local_file_path_unmodified = local_file_path
                         #check that it is a string and that fits the A-Z a-z 0-9 _-.
                         if not isinstance(local_file_path, str) or not re.match(r'^[A-Za-z_\-\.]+$', local_file_path):
@@ -504,14 +508,21 @@ class AIHubServer:
 
                         # TODO re-enable this check later
                         # check that the file exists
-                        # if not path.exists(value_to_set) or not path.isfile(value_to_set):
-                        #    return None, False, f"File not found for expose id {expose_id} at file {local_file_path_unmodified}"
+                        if not path.exists(value_to_set) or not path.isfile(value_to_set):
+                            return None, False, f"File not found for expose id {expose_id} at file {local_file_path_unmodified}"
 
                         workflow_copy[key]["inputs"]["local_file"] = value_to_set
+
+                        for prop_key, prop_value in request["expose"][expose_id].items():
+                            if key != "local_file":
+                                workflow_copy[key]["inputs"][prop_key] = prop_value
                     elif class_type == "AIHubExposeImageBatch":
+                        if not isinstance(request["expose"][expose_id], dict) or "local_files" not in request["expose"][expose_id]:
+                            return None, False, f"Invalid parameter for expose id {expose_id}, must be an object with a local_files property"
+                        
                         # local_file is a special case, it must represent a local file path within a subdirectory that is
                         # specific for the given websocket session, so we must check that it is alphanumeric and does not contain any path traversal characters
-                        local_file_paths = request["expose"][expose_id]
+                        local_file_paths = request["expose"][expose_id]["local_files"]
 
                         if not isinstance(local_file_paths, list):
                             return None, False, f"Invalid local_files value for expose id {expose_id}, must be a list of file names"
@@ -533,12 +544,23 @@ class AIHubServer:
                         value_to_set = json.dumps(validated_file_paths)
 
                         workflow_copy[key]["inputs"]["local_files"] = value_to_set
-                    elif class_type == "AIHubExposeSeed":
-                        workflow_copy[key]["inputs"]["value"] = request["expose"][expose_id]["value"]
-                        workflow_copy[key]["inputs"]["value_fixed"] = request["expose"][expose_id]["value_fixed"]
-                    else:
+
+                        for prop_key, prop_value in request["expose"][expose_id].items():
+                            if key != "local_files":
+                                workflow_copy[key]["inputs"][prop_key] = prop_value
+                    elif isinstance(request["expose"][expose_id], dict):
+                        # for other types of expose nodes, we just copy every property that is exposed
+                        # into the inputs of the node
+                        for prop_key, prop_value in request["expose"][expose_id].items():
+                            workflow_copy[key]["inputs"][prop_key] = prop_value
+
+                        # security is not necessarily a concern here because the class will
+                        # only use the properties it expects
+                    elif "value" in workflow_copy[key]["inputs"]:
                         workflow_copy[key]["inputs"]["value"] = request["expose"][expose_id]
-        
+                    else:
+                        return None, False, f"Invalid parameter for expose id {expose_id}, cannot set value"
+                    
         return workflow_copy, True, "Workflow validated and prepared"
     
     async def on_websocket_connect(self, request):
@@ -566,6 +588,8 @@ class AIHubServer:
                 'workflows': self.retrieve_valid_workflows_aihub_summary(),
                 'models': self.retrieve_checkpoints_cleaned(),
                 'loras': self.retrieve_loras_cleaned(),
+                'samplers': comfy.samplers.KSampler.SAMPLERS,
+                'schedulers': comfy.samplers.KSampler.SCHEDULERS
             })
 
             # Asynchronously wait for and process messages from the client
@@ -762,6 +786,12 @@ class AIHubServer:
         # Create the aiohttp application
         app = web.Application()
         app.router.add_get('/ws', self.on_websocket_connect)
+
+        # add an endpoint to get raw files, this is also useful for retrieving the
+        # image files and it is mainly what it is used for
+        app.router.add_static('/workflows/', path=self.workflows_dir, show_index=True)
+        app.router.add_static('/models/', path=self.models_dir, show_index=True)
+        app.router.add_static('/loras/', path=self.loras_dir, show_index=True)
 
         # Start the server
         loop = asyncio.new_event_loop()
