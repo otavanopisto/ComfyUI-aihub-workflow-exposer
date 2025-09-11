@@ -625,7 +625,18 @@ class AIHubServer:
                             if not isinstance(new_header, dict) or "type" not in new_header or "filename" not in new_header or not new_header["filename"].isalnum():
                                 await ws.send_json({'type': 'ERROR', 'message': 'Invalid binary header'})
                                 continue
+                            if not re.match(r'^[A-Za-z_\-\.]+$', new_header["filename"]):
+                                await ws.send_json({'type': 'ERROR', 'message': 'Invalid filename in binary header, must be alphanumeric dots and dashes only'})
+                                continue
+                            # now we got to check a if-not-exist flag
+                            if "if_not_exists" in new_header and new_header["if_not_exists"] == True:
+                                full_path = path.join(socket_file_dir, new_header["filename"])
+                                if path.exists(full_path) and path.isfile(full_path):
+                                    await ws.send_json({'type': 'FILE_UPLOAD_SKIP', 'filename': new_header["filename"]})
+                                    PREVIOUS_BINARY_HEADER = None
+                                    continue
                             PREVIOUS_BINARY_HEADER = data["binary_header"]
+                            await ws.send_json({'type': 'BINARY_HEADER_ACK', 'filename': new_header["filename"]})
                             continue
 
                         elif 'cancel' in data and data["type"] == "WORKFLOW_OPERATION":

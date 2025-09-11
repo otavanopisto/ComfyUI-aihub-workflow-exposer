@@ -79,14 +79,13 @@ class AIHubExposeInteger:
                 "min": ("INT", {"default": 0}),
                 "max": ("INT", {"default": 100}),
                 "step": ("INT", {"default": 1}),
-                "start": ("INT", {"default": 0}),
                 "value": ("INT", {"default": 10}),
                 "advanced": ("BOOLEAN", {"default": False, "tooltip": "If set to true, it will make this option be hidden under advanced options for this workflow"}),
                 "index": ("INT", {"default": 0, "tooltip": "this value is used for sorting the input fields when displaying, lower values will appear first"}),
             }
         }
 
-    def get_exposed_int(self, label, tooltip, min, max, step, start, value, description, advanced, index):
+    def get_exposed_int(self, label, tooltip, min, max, step, value, description, advanced, index):
         if (value < min):
             raise ValueError(f"Error: {id} should be greater or equal to {min}")
         if (value > max):
@@ -173,14 +172,13 @@ class AIHubExposeFloat:
                 "min": ("FLOAT", {"default": 0.0}),
                 "max": ("FLOAT", {"default": 1.0}),
                 "step": ("FLOAT", {"default": 0.01}),
-                "start": ("FLOAT", {"default": 0.0}),
                 "value": ("FLOAT", {"default": 0.5}),
                 "advanced": ("BOOLEAN", {"default": False, "tooltip": "If set to true, it will make this option be hidden under advanced options for this workflow."}),
                 "index": ("INT", {"default": 0, "tooltip": "This value is used for sorting the input fields when displaying; lower values will appear first."}),
             }
         }
 
-    def get_exposed_float(self, id, label, tooltip, min, max, step, start, value, advanced, index):
+    def get_exposed_float(self, id, label, tooltip, min, max, step, value, advanced, index):
         if (value < min):
             raise ValueError(f"Error: {id} should be greater or equal to {min}")
         if (value > max):
@@ -545,6 +543,7 @@ class AIHubExposeImageBatch:
                 "label": ("STRING", {"default": "Image Batch", "tooltip": "This is the label that will appear in the field."}),
                 "tooltip": ("STRING", {"default": "", "tooltip": "An optional tooltip"}),
                 "type": (["new_images", "all_reference_frames", "new_reference_frames"]),
+                "minlen": ("INT", {"default": 0}),
                 "maxlen": ("INT", {"default": 1000}),
                 "index": ("INT", {"default": 0, "tooltip": "This value is used for sorting the input fields when displaying; lower values will appear first."}),
             },
