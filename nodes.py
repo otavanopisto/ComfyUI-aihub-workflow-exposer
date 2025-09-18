@@ -1,3 +1,4 @@
+import io
 import os
 from nodes import LoadImage
 import json
@@ -22,7 +23,7 @@ from .server import AIHubServer
 
 SERVER = AIHubServer()
 SERVER.start_server()
-print("AIHub Server Started ===========================================================================================================================================================================")
+print("AIHub Server Started")
 
 class AIHubWorkflowController:
     """
@@ -51,7 +52,7 @@ class AIHubWorkflowController:
     FUNCTION = "register"
     CATEGORY = "aihub/workflow"
 
-    def register():
+    def register(self, id, label, description, category, context, project_type, project_type_init):
         return ()
 
 ### EXPOSES
@@ -314,7 +315,7 @@ class AIHubExposeString:
             }
         }
 
-    def get_exposed_string(self, id, label, tooltip, minlen, maxlen, value, advanced, index):
+    def get_exposed_string(self, id, label, tooltip, minlen, maxlen, value, multiline, advanced, index):
         if (len(value) < minlen):
             raise ValueError(f"Error: {label} length should be greater or equal to {minlen}")
         if (len(value) > maxlen):
@@ -443,8 +444,8 @@ class AIHubExposeImage:
     CATEGORY = "aihub/expose"
     FUNCTION = "get_exposed_image"
     
-    RETURN_TYPES = ("IMAGE", "INT", "INT", "INT", "INT", "INT",)
-    RETURN_NAMES = ("IMAGE", "POS_X", "POS_Y", "LAYER_ID", "WIDTH", "HEIGHT",)
+    RETURN_TYPES = ("IMAGE", "MASK", "INT", "INT", "STRING", "INT", "INT",)
+    RETURN_NAMES = ("IMAGE", "MASK", "POS_X", "POS_Y", "LAYER_ID", "WIDTH", "HEIGHT",)
 
     @classmethod
     def INPUT_TYPES(s):
@@ -459,21 +460,24 @@ class AIHubExposeImage:
                     "merged_image_without_current_layer",
                     "upload",
                 ], {"default": "upload", "tooltip": "The source of the image"}),
-                "value_pos_x": ("INT", {"default": 0, "tooltip": "The X position of the layer in the canvas"}),
-                "value_pos_y": ("INT", {"default": 0, "tooltip": "The Y position of the layer in the canvas"}),
+                "pos_x": ("INT", {"default": 0, "tooltip": "The X position of the layer in the canvas"}),
+                "pos_y": ("INT", {"default": 0, "tooltip": "The Y position of the layer in the canvas"}),
                 "layer_id": ("STRING", {"default": "", "tooltip": "The ID of the layer to use, only given if type is current_layer or previous_layer"}),
                 "index": ("INT", {"default": 0, "tooltip": "This value is used for sorting the input fields when displaying; lower values will appear first."}),
             },
             "optional": {
                 "value": ("IMAGE",),
+                "value_mask": ("MASK",),
                 "local_file": ("STRING",),
             },
         }
 
-    def get_exposed_image(self, id, label, tooltip, type, value_pos_x, value_pos_y, layer_id, index, value=None, local_file=None):
+    def get_exposed_image(self, id, label, tooltip, type, pos_x, pos_y, layer_id, index, value=None, value_mask=None, local_file=None):
         image = None
+        mask = None
         if value is not None:
             image = value
+            mask = value_mask
         elif local_file is not None:
             if (os.path.exists(local_file)):
                 # Instantiate a LoadImage node and use its logic to load the file
@@ -481,6 +485,7 @@ class AIHubExposeImage:
                 # The load_image method returns a tuple, so we need to get the first element
                 loaded_image_tuple = loader.load_image(local_file)
                 image = loaded_image_tuple[0]
+                mask = loaded_image_tuple[1]
             else:
                 filenameOnly = os.path.basename(local_file)
                 raise ValueError(f"Error: Image file not found: {filenameOnly}")
@@ -489,7 +494,7 @@ class AIHubExposeImage:
 
         _, height, width, _ = image.shape
         
-        return (image, value_pos_x, value_pos_y, layer_id, width, height,)
+        return (image, mask, pos_x, pos_y, layer_id, width, height,)
     
 class AIHubExposeImageInfoOnly:
     CATEGORY = "aihub/expose"
@@ -506,8 +511,8 @@ class AIHubExposeImageInfoOnly:
                 "label": ("STRING", {"default": "Image", "tooltip": "This is the label that will appear in the field."}),
                 "tooltip": ("STRING", {"default": "", "tooltip": "An optional tooltip"}),
                 "type": (["current_layer", "merged_image", "merged_image_without_current_layer", "upload"], {"default": "upload", "tooltip": "The source of the image"}),
-                "value_pos_x": ("INT", {"default": 0, "tooltip": "The X position of the layer in the canvas"}),
-                "value_pos_y": ("INT", {"default": 0, "tooltip": "The Y position of the layer in the canvas"}),
+                "pos_x": ("INT", {"default": 0, "tooltip": "The X position of the layer in the canvas"}),
+                "pos_y": ("INT", {"default": 0, "tooltip": "The Y position of the layer in the canvas"}),
                 "layer_id": ("INT", {"default": 0, "tooltip": "The Z (Layer) position of the image."}),
                 "index": ("INT", {"default": 0, "tooltip": "This value is used for sorting the input fields when displaying; lower values will appear first."}),
             },
@@ -518,7 +523,7 @@ class AIHubExposeImageInfoOnly:
             }
         }
 
-    def get_exposed_image_info_only(self, id, label, tooltip, type, value_pos_x, value_pos_y, layer_id, index, value=None, value_width=1024, value_height=1024):
+    def get_exposed_image_info_only(self, id, label, tooltip, type, pos_x, pos_y, layer_id, index, value=None, value_width=1024, value_height=1024):
         image = None
         height = value_height
         width = value_width
@@ -526,7 +531,7 @@ class AIHubExposeImageInfoOnly:
             image = value
             _, height, width, _ = image.shape
         
-        return (value_pos_x, value_pos_y, layer_id, width, height,)
+        return (pos_x, pos_y, layer_id, width, height,)
     
 class AIHubExposeImageBatch:
     CATEGORY = "aihub/expose"
@@ -549,17 +554,22 @@ class AIHubExposeImageBatch:
             },
             "optional": {
                 "values": ("IMAGE",),
+                "masks": ("MASK",),
                 "local_files": ("STRING", {"default": "[]"}),
             }
         }
 
-    def get_exposed_image_batch(self, id, label, tooltip, type, maxlen, index, values=None, local_files=None):
+    def get_exposed_image_batch(self, id, label, tooltip, type, maxlen, index, values=None, values_masks=None, local_files=None):
         image_batch = None
+        masks = None
         if values is not None:
             # If an image batch is passed from a connected node, use it directly.
             image_batch = values
+            masks = values_masks
             if image_batch.shape[0] > maxlen:
                 raise ValueError(f"Error: {id} contains too many files")
+            if masks is not None and masks.shape[0] != image_batch.shape[0]:
+                raise ValueError(f"Error: {id} the number of masks does not match the number of images")
             
         elif local_files:
             # If a local_files string is provided, attempt to load the images.
@@ -572,19 +582,23 @@ class AIHubExposeImageBatch:
                     raise ValueError(f"Error: {id} contains too many files")
                 
                 loaded_images = []
+                loaded_masks = []
                 loader = LoadImage()
                 
                 for filename in filenames:
                     # Check if the file exists before trying to load it.
                     if os.path.exists(filename):
                         # Load each image and append it to the list.
-                        loaded_images.append(loader.load_image(filename)[0])
+                        loaded_img_tuple = loader.load_image(filename)
+                        loaded_images.append(loaded_img_tuple[0])
+                        loaded_masks.append(loaded_img_tuple[1])
                     else:
                         filenameOnly = os.path.basename(filename)
                         raise ValueError(f"Error: Image file not found: {filenameOnly}")
                 
                 # Concatenate all the images into a single batch tensor.
                 image_batch = torch.cat(loaded_images, dim=0)
+                masks = torch.cat(loaded_masks, dim=0)
             except json.JSONDecodeError:
                 # Handle invalid JSON input gracefully.
                 raise ValueError("Error: local_files is not a valid JSON string encoding an array")
@@ -592,14 +606,14 @@ class AIHubExposeImageBatch:
             # Return an empty placeholder if no input is provided.
             raise ValueError("You must specify either local_files or the values of the images for this node to function")
         
-        return (image_batch,)
+        return (image_batch, masks,)
 
 ## Actions
 class AIHubActionNewImage:
     CATEGORY = "aihub/actions"
     FUNCTION = "run_action"
     
-    RETURN_TYPES = ("IMAGE", )
+    RETURN_TYPES = ("IMAGE", "MASK",)
     OUTPUT_NODE = True
 
     @classmethod
@@ -607,30 +621,58 @@ class AIHubActionNewImage:
         return {
             "required": {
                 "image": ("IMAGE",),
+                "action": (["REPLACE", "APPEND"], {"default": "APPEND", "tooltip": "If append is selected, if the image exist it will be added a number to the name to make it unique, if replace is selected, the image will be replaced with the new one"}),
+                "name": ("STRING", {"default": "new image", "tooltip": "The name of the image this is used for the filename value"}),
+            },
+            "optional": {
+                "mask": ("MASK",),
             }
         }
     
-    def run_action(image):
-        image = image[0]
-        i = 255. * image.cpu().numpy()
-        img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
-        SERVER.send_binary_data_to_current_client(
-            img, "image/png", {
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        return float("NaN")
+    
+    def run_action(self, image, mask, action, name):
+        c_image = image[0]
+        # we have to convert this image to bytes and apply the mask if the mask is given
+        if mask is not None:
+            c_mask = mask[0]
+            # convert mask to binary
+            mask_np = c_mask.cpu().numpy()
+            alpha_channel = Image.fromarray((mask_np * 255).clip(0, 255).astype(np.uint8), mode='L')
+            i = 255. * c_image.cpu().numpy()
+            img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
+            img.putalpha(alpha_channel)
+        else:
+            i = 255. * c_image.cpu().numpy()
+            img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
+        img_bytes = io.BytesIO()
+        img.save(img_bytes, format='PNG')
+
+        SERVER.send_binary_data_to_current_client_sync(
+            img_bytes.getvalue(), "image/png", {
                 "action": "NEW_IMAGE",
-                "width": image.shape[3],
-                "height": image.shape[2],
+                "width": c_image.shape[1],
+                "height": c_image.shape[0],
                 "type": "image/png",
+                "file_action": action,
+                "name": name,
             },
         )
 
-        return (image,)
+        return (image, mask)
     
 class AIHubActionNewLayer:
     CATEGORY = "aihub/actions"
     FUNCTION = "run_action"
     
-    RETURN_TYPES = ("IMAGE", )
+    RETURN_TYPES = ("IMAGE", "MASK",)
     OUTPUT_NODE = True
+
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        return float("NaN")
 
     @classmethod
     def INPUT_TYPES(s):
@@ -641,27 +683,45 @@ class AIHubActionNewLayer:
                 "pos_y": ("INT", {"default": 0, "tooltip": "The Y position of the layer in the canvas"}),
                 "reference_layer_id": ("STRING", {"default": "", "tooltip": "The Layer ID regarding the position of the image, the meta-values __first__ and __last__ can be used to refer to the first and last layer respectively"}),
                 "reference_layer_action": (["REPLACE", "NEW_BEFORE", "NEW_AFTER"], {"default": "NEW_AFTER", "tooltip": "Specify the action to execute at the given layer id"}),
+                "name": ("STRING", {"default": "new layer", "tooltip": "The name of the layer this is used for the layer list in the UI"}),
+            },
+            "optional": {
+                "mask": ("MASK",),
             }
         }
-    
-    def run_action(image, pos_x, pos_y, reference_layer_id, reference_layer_action):
-        image = image[0]
-        i = 255. * image.cpu().numpy()
-        img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
-        SERVER.send_binary_data_to_current_client(
-            img, "image/png",{
+
+    def run_action(self, image, mask, pos_x, pos_y, reference_layer_id, reference_layer_action, name):
+        c_image = image[0]
+        # we have to convert this image to bytes and apply the mask if the mask is given
+        if mask is not None:
+            c_mask = mask[0]
+            # convert mask to binary
+            mask_np = c_mask.cpu().numpy()
+            alpha_channel = Image.fromarray((mask_np * 255).clip(0, 255).astype(np.uint8), mode='L')
+            i = 255. * c_image.cpu().numpy()
+            img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
+            img.putalpha(alpha_channel)
+        else:
+            i = 255. * c_image.cpu().numpy()
+            img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
+        img_bytes = io.BytesIO()
+        img.save(img_bytes, format='PNG')
+
+        SERVER.send_binary_data_to_current_client_sync(
+            img_bytes.getvalue(), "image/png", {
                 "action": "NEW_LAYER",
-                "width": image.shape[3],
-                "height": image.shape[2],
+                "width": c_image.shape[1],
+                "height": c_image.shape[0],
                 "type": "image/png",
                 "pos_x": pos_x,
                 "pos_y": pos_y,
                 "reference_layer_id": reference_layer_id,
                 "reference_layer_action": reference_layer_action,
+                "name": name,
             },
         )
 
-        return (image,)
+        return (image, mask)
     
 class AIHubActionSetProgressStatus:
     """
@@ -675,6 +735,10 @@ class AIHubActionSetProgressStatus:
     RETURN_NAMES = ("any",)
 
     @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        return float("NaN")
+
+    @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
@@ -684,14 +748,12 @@ class AIHubActionSetProgressStatus:
         }
 
     def run_action(self, value):
-        #server = PromptServer.instance
-        #server.send_sync(
-        #    "AIHUB_ACTION_SET_PROGRESS_STATUS",
-        #    {
-        #        "status": value,
-        #    },
-        #    server.client_id,
-        #)
+        SERVER.send_json_to_current_client_sync(
+            {
+                "action": "STATUS",
+                "message": value,
+            },
+        )
 
         return (value)
     
@@ -706,6 +768,10 @@ class AIHubPatchActionSetConfigInteger:
     FUNCTION = "run_action"
 
     RETURN_TYPES = ()
+
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        return float("NaN")
 
     @classmethod
     def INPUT_TYPES(s):
@@ -740,6 +806,10 @@ class AIHubPatchActionSetConfigFloat:
     RETURN_TYPES = ()
 
     @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        return float("NaN")
+
+    @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
@@ -772,6 +842,10 @@ class AIHubPatchActionSetConfigBoolean:
     RETURN_TYPES = ()
 
     @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        return float("NaN")
+
+    @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
@@ -802,6 +876,10 @@ class AIHubPatchActionSetConfigString:
     FUNCTION = "run_action"
 
     RETURN_TYPES = ()
+
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        return float("NaN")
 
     @classmethod
     def INPUT_TYPES(s):
@@ -840,25 +918,111 @@ class AIHubPatchActionSetAudio:
 class AIHubPatchActionSetPreviewImage:
     pass
 
-class AIHubDevWebsocketDebug:
+class AIHubUtilsCropMergedImageToLayerSize:
     """
-    A developer tool in order to test websocket information from within comfyui, you should change the seed in order
-    to retrieve new information
+    A utility node for cropping a merged image to the size of a given layer
     """
 
-    CATEGORY = "aihub/actions"
-    FUNCTION = "run_action"
+    CATEGORY = "aihub/utils"
+    FUNCTION = "crop_merged_image_to_layer_size"
 
-    RETURN_TYPES = ("*", )
+    RETURN_TYPES = ("IMAGE", "MASK",)
+    RETURN_NAMES = ("IMAGE", "MASK",)
 
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
-                "retrieve": (["LAST_PING_QUEUE_VALUE"], {"tooltip": "The element to retrieve"}),
-                "seed": ("STRING", {"default": "42", "tooltip": "A random seed in order to trigger "}),
+                "merged_image": ("IMAGE",),
+                "layer_pos_x": ("INT", {"default": 0, "tooltip": "The X position of the layer in the canvas", "min": -10000, "max": 10000}),
+                "layer_pos_y": ("INT", {"default": 0, "tooltip": "The Y position of the layer in the canvas", "min": -10000, "max": 10000}),
+                "layer_width": ("INT", {"default": 512, "tooltip": "The width of the layer", "min": 1, "max": 10000}),
+                "layer_height": ("INT", {"default": 512, "tooltip": "The height of the layer", "min": 1, "max": 10000}),
+            },
+            "optional": {
+                "merged_mask": ("MASK", {"optional": True, "tooltip": "The mask of the merged image"}),
             }
         }
 
-    def run_action(self, seed):
-        return (SERVER.LAST_PING_QUEUE_VALUE, )
+    def crop_merged_image_to_layer_size(self, merged_image, layer_pos_x, layer_pos_y, layer_width, layer_height, merged_mask=None):
+        _, merged_height, merged_width, _ = merged_image.shape
+
+        # Calculate cropping coordinates
+        x1 = max(0, layer_pos_x)
+        y1 = max(0, layer_pos_y)
+        x2 = min(merged_width, layer_pos_x + layer_width)
+        y2 = min(merged_height, layer_pos_y + layer_height)
+
+        # Crop the image
+        cropped_image = merged_image[:, y1:y2, x1:x2, :]
+
+        cropped_mask = None
+        if merged_mask is not None:
+            cropped_mask = merged_mask[:, y1:y2, x1:x2]
+
+        return (cropped_image, cropped_mask)
+    
+class AIHubUtilsFitLayerToMergedImage:
+    """
+    A utility node for fitting a layer inside the bounds of a given merged image
+    cropping position and size if necessary
+    """
+
+    CATEGORY = "aihub/utils"
+    FUNCTION = "fit_layer_to_merged_image"
+
+    RETURN_TYPES = ("IMAGE", "MASK", "INT", "INT", "INT", "INT",)
+    RETURN_NAMES = ("IMAGE", "MASK", "POS_X", "POS_Y", "WIDTH", "HEIGHT",)
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "merged_image_width": ("INT", {"default": 1024, "tooltip": "The width of the merged image"}),
+                "merged_image_height": ("INT", {"default": 1024, "tooltip": "The height of the merged image"}),
+                "layer_pos_x": ("INT", {"default": 0, "tooltip": "The X position of the layer in the canvas", "min": -10000, "max": 10000}),
+                "layer_pos_y": ("INT", {"default": 0, "tooltip": "The Y position of the layer in the canvas", "min": -10000, "max": 10000}),
+                "layer_image": ("IMAGE", {"optional": True, "tooltip": "The image of the layer"}),
+            },
+            "optional": {
+                "layer_mask": ("MASK", {"optional": True, "tooltip": "The mask of the layer"}),
+            }
+        }
+
+    def fit_layer_to_merged_image(self, merged_image_width, merged_image_height, layer_pos_x, layer_pos_y, layer_image, layer_mask=None):
+        _, layer_height, layer_width, _ = layer_image.shape
+
+        # layer bbox
+        layer_x1 = layer_pos_x
+        layer_y1 = layer_pos_y
+        layer_x2 = layer_pos_x + layer_width
+        layer_y2 = layer_pos_y + layer_height
+        # merged image bbox
+        merged_x1 = 0
+        merged_y1 = 0
+        merged_x2 = merged_image_width
+        merged_y2 = merged_image_height
+
+        # make an intersection of the two bboxes to get the new bbox of the layer
+        new_x1 = max(layer_x1, merged_x1)
+        new_y1 = max(layer_y1, merged_y1)
+        new_x2 = min(layer_x2, merged_x2)
+        new_y2 = min(layer_y2, merged_y2)
+        new_width = new_x2 - new_x1
+        new_height = new_y2 - new_y1
+
+        # apply the new bbox to the layer image and mask
+        if new_width <= 0 or new_height <= 0:
+            raise ValueError("Error: The layer is completely outside the bounds of the merged image")
+        
+        # calculate the crop coordinates relative to the layer image
+        crop_x1 = new_x1 - layer_x1
+        crop_y1 = new_y1 - layer_y1
+        crop_x2 = crop_x1 + new_width
+        crop_y2 = crop_y1 + new_height
+        cropped_image = layer_image[:, crop_y1:crop_y2, crop_x1:crop_x2, :]
+        cropped_mask = None
+        if layer_mask is not None:
+            cropped_mask = layer_mask[:, crop_y1:crop_y2, crop_x1:crop_x2]
+
+        return (cropped_image, cropped_mask, new_x1, new_y1, new_width, new_height)

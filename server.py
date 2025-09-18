@@ -2,7 +2,7 @@ import asyncio
 import threading
 import json
 import uuid
-from os import path, listdir, environ, makedirs, remove, rmdir
+from os import path, listdir, environ, makedirs
 from copy import deepcopy
 import tempfile
 from time import sleep
@@ -10,6 +10,9 @@ import re
 from functools import partial
 from nodes import interrupt_processing
 import comfy.samplers
+from shutil import rmtree
+import threading
+import time
 
 from aiohttp import web
 from server import PromptServer
@@ -52,6 +55,12 @@ class AIHubServer:
     loras_dir = path.join(aihub_dir, "loras")
     models_dir = path.join(aihub_dir, "models")
 
+    awaiting_tasks_amount = 0
+    awaiting_tasks_done_flag = None
+    awaiting_tasks_lock = threading.Lock()
+
+    loop = None
+
     def __init__(self):
         # create folder ../../aihub if it doesnt't exist
         if not path.exists(self.aihub_dir):
@@ -93,6 +102,9 @@ class AIHubServer:
                 prompt_specific_data = prompt_info[prompt_id_to_check]
                 status = prompt_specific_data["status"]
 
+                if self.awaiting_tasks_amount > 0:
+                    self.awaiting_tasks_done_flag.wait(timeout=30)
+
                 if ("status_str" in status and status["status_str"] == "error"):
                     error_message = "Unknown error"
                     if "messages" in status:
@@ -122,7 +134,10 @@ class AIHubServer:
                 return
                 
             self.CURRENTLY_RUNNING = None
+            
             asyncio.run(self.process_next_workflow_in_queue())
+        else:
+            print("Queue not empty or no current workflow running, not processing next workflow")
     
     def retrieve_checkpoints_raw(self):
         """
@@ -499,14 +514,13 @@ class AIHubServer:
                         # specific for the given websocket session, so we must check that it is alphanumeric and does not contain any path traversal characters
                         local_file_path = request["expose"][expose_id]["local_file"]
                         local_file_path_unmodified = local_file_path
-                        #check that it is a string and that fits the A-Z a-z 0-9 _-.
-                        if not isinstance(local_file_path, str) or not re.match(r'^[A-Za-z_\-\.]+$', local_file_path):
+                        #check that it is a string and that fits the 0-9 A-Z a-z _-.
+                        if not isinstance(local_file_path, str) or not re.match(r'^[0-9A-Za-z_\-\.]+$', local_file_path):
                             return None, False, f"Invalid local_file path for expose id {expose_id}, must be alphanumeric dots and dashes only not {local_file_path_unmodified}"
                     
                         # if all checks pass, we need to convert the local_file_path to a full path
                         value_to_set = path.join(socket_file_dir, local_file_path)
 
-                        # TODO re-enable this check later
                         # check that the file exists
                         if not path.exists(value_to_set) or not path.isfile(value_to_set):
                             return None, False, f"File not found for expose id {expose_id} at file {local_file_path_unmodified}"
@@ -514,7 +528,7 @@ class AIHubServer:
                         workflow_copy[key]["inputs"]["local_file"] = value_to_set
 
                         for prop_key, prop_value in request["expose"][expose_id].items():
-                            if key != "local_file":
+                            if prop_key != "local_file":
                                 workflow_copy[key]["inputs"][prop_key] = prop_value
                     elif class_type == "AIHubExposeImageBatch":
                         if not isinstance(request["expose"][expose_id], dict) or "local_files" not in request["expose"][expose_id]:
@@ -530,7 +544,7 @@ class AIHubServer:
                         validated_file_paths = []
                         for local_file_path in local_file_paths:
                             local_file_path_unmodified = local_file_path
-                            if not isinstance(local_file_path, str) or not re.match(r'^[A-Za-z_\-\.]+$', local_file_path):
+                            if not isinstance(local_file_path, str) or not re.match(r'^[0-9A-Za-z_\-\.]+$', local_file_path):
                                 return None, False, f"Invalid local_file path for expose id {expose_id}, must be alphanumeric dots and dashes only not {local_file_path_unmodified}"
                             # if all checks pass, we need to convert the local_file_path to a full path
                             full_path = path.join(socket_file_dir, local_file_path)
@@ -546,7 +560,7 @@ class AIHubServer:
                         workflow_copy[key]["inputs"]["local_files"] = value_to_set
 
                         for prop_key, prop_value in request["expose"][expose_id].items():
-                            if key != "local_files":
+                            if prop_key != "local_files":
                                 workflow_copy[key]["inputs"][prop_key] = prop_value
                     elif isinstance(request["expose"][expose_id], dict):
                         # for other types of expose nodes, we just copy every property that is exposed
@@ -560,7 +574,7 @@ class AIHubServer:
                         workflow_copy[key]["inputs"]["value"] = request["expose"][expose_id]
                     else:
                         return None, False, f"Invalid parameter for expose id {expose_id}, cannot set value"
-                    
+
         return workflow_copy, True, "Workflow validated and prepared"
     
     async def on_websocket_connect(self, request):
@@ -576,7 +590,7 @@ class AIHubServer:
             makedirs(socket_file_dir)
 
         print(f"New WebSocket connection")
-        PREVIOUS_BINARY_HEADER = None
+        PREVIOUS_UPLOAD_HEADER = None
 
         try:
 
@@ -610,9 +624,12 @@ class AIHubServer:
                             await ws.send_json({'type': 'PONG', 'value': data["ping"]})
                             self.LAST_PING_QUEUE_VALUE = str(data["ping"])
 
-                        elif "check_exists" in data and data["type"] == "FILE_OPERATION":
-                            file_to_check = data["check_exists"]
-                            if not isinstance(file_to_check, str) or not re.match(r'^[A-Za-z_\-\.]+$', file_to_check):
+                        elif data["type"] == "FILE_CHECK_EXISTS":
+                            file_to_check = data["filename"] if "filename" in data else None
+                            if file_to_check is None:
+                                await ws.send_json({'type': 'ERROR', 'message': 'Missing file name to check'})
+                                continue
+                            if not isinstance(file_to_check, str) or not re.match(r'^[0-9A-Za-z_\-\.]+$', file_to_check):
                                 await ws.send_json({'type': 'ERROR', 'message': 'Invalid file name to check, must be alphanumeric dots and dashes only'})
                                 continue
                             full_path = path.join(socket_file_dir, file_to_check)
@@ -620,23 +637,22 @@ class AIHubServer:
                             await ws.send_json({'type': 'CHECK_EXISTS_STATUS', 'file': file_to_check, 'exists': exists})
                             continue
 
-                        elif "binary_header" in data and data["type"] == "FILE_OPERATION":
-                            new_header = data["binary_header"]
-                            if not isinstance(new_header, dict) or "type" not in new_header or "filename" not in new_header or not new_header["filename"].isalnum():
+                        elif data["type"] == "FILE_UPLOAD":
+                            if "filename" not in data or not data["filename"].isalnum():
                                 await ws.send_json({'type': 'ERROR', 'message': 'Invalid binary header'})
                                 continue
-                            if not re.match(r'^[A-Za-z_\-\.]+$', new_header["filename"]):
+                            if not re.match(r'^[0-9A-Za-z_\-\.]+$', data["filename"]):
                                 await ws.send_json({'type': 'ERROR', 'message': 'Invalid filename in binary header, must be alphanumeric dots and dashes only'})
                                 continue
                             # now we got to check a if-not-exist flag
-                            if "if_not_exists" in new_header and new_header["if_not_exists"] == True:
-                                full_path = path.join(socket_file_dir, new_header["filename"])
+                            if "if_not_exists" in data and data["if_not_exists"] == True:
+                                full_path = path.join(socket_file_dir, data["filename"])
                                 if path.exists(full_path) and path.isfile(full_path):
-                                    await ws.send_json({'type': 'FILE_UPLOAD_SKIP', 'filename': new_header["filename"]})
-                                    PREVIOUS_BINARY_HEADER = None
+                                    await ws.send_json({'type': 'FILE_UPLOAD_SKIP', 'filename': data["filename"]})
+                                    PREVIOUS_UPLOAD_HEADER = None
                                     continue
-                            PREVIOUS_BINARY_HEADER = data["binary_header"]
-                            await ws.send_json({'type': 'BINARY_HEADER_ACK', 'filename': new_header["filename"]})
+                            PREVIOUS_UPLOAD_HEADER = data
+                            await ws.send_json({'type': 'UPLOAD_ACK', 'filename': data["filename"]})
                             continue
 
                         elif 'cancel' in data and data["type"] == "WORKFLOW_OPERATION":
@@ -679,7 +695,7 @@ class AIHubServer:
                             # validate before queueing
                             validated_workflow, valid, message = self.validate_and_process_workflow_request(socket_file_dir, data)
                             if not valid:
-                                await ws.send_json({'type': 'ERROR', 'message': message})
+                                await ws.send_json({'type': 'ERROR', 'message': message, 'workflow_id': data.get('workflow_id', None)})
                                 continue
                             # Place the prompt in the queue for the ComfyUI node to pick up.
                             # We use a lock to ensure this is a thread-safe operation.
@@ -717,12 +733,14 @@ class AIHubServer:
                 elif msg.type == web.WSMsgType.BINARY:
                     print('WebSocket recieved a file')
                     # we now save the file to the socket_file_dir with the name specified in the previous header
-                    if PREVIOUS_BINARY_HEADER is None:
-                        await ws.send_json({'type': 'ERROR', 'message': 'Missing binary header before file upload'})
+                    if PREVIOUS_UPLOAD_HEADER is None:
+                        await ws.send_json({'type': 'ERROR', 'message': 'Missing upload header before file upload'})
                         continue
 
-                    file_name = PREVIOUS_BINARY_HEADER.get("filename", None)
+                    file_name = PREVIOUS_UPLOAD_HEADER.get("filename", None)
                     full_path = path.join(socket_file_dir, file_name)
+
+                    print('File to be saved at ' + full_path)
 
                     try:
                         with open(full_path, "wb") as f:
@@ -732,7 +750,7 @@ class AIHubServer:
                         await ws.send_json({'type': 'ERROR', 'message': 'Error saving file'})
                         print(f"Error saving file {file_name}: {e}")
 
-                    PREVIOUS_BINARY_HEADER = None
+                    PREVIOUS_UPLOAD_HEADER = None
                 else:
                     print('WebSocket received unknown message type')
                     await ws.send_json({'type': 'ERROR', 'message': 'Unknown message type'})
@@ -762,11 +780,7 @@ class AIHubServer:
                 # clean up the temporary directory for this websocket connection
                 try:
                     if path.exists(socket_file_dir):
-                        for f in listdir(socket_file_dir):
-                            file_path = path.join(socket_file_dir, f)
-                            if path.isfile(file_path):
-                                remove(file_path)
-                        rmdir(socket_file_dir)
+                        rmtree(socket_file_dir)
                 except Exception as e:
                     print(f"Error cleaning up socket file directory {socket_file_dir}: {e}")
 
@@ -805,10 +819,10 @@ class AIHubServer:
         app.router.add_static('/loras/', path=self.loras_dir, show_index=True)
 
         # Start the server
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(self.run_websocket_server(app, "0.0.0.0", WEB_SOCKET_SERVER_PORT))
-        loop.close()
+        self.loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.loop)
+        self.loop.run_until_complete(self.run_websocket_server(app, "0.0.0.0", WEB_SOCKET_SERVER_PORT))
+        self.loop.close()
     
     def start_server(self):
         """
@@ -847,6 +861,11 @@ class AIHubServer:
         interrupt_processing()
 
     async def process_current(self):
+        self.awaiting_tasks_lock.acquire()
+        self.awaiting_tasks_amount = 0
+        self.awaiting_tasks_lock.release()
+        self.awaiting_tasks_done_flag = threading.Event()
+
         if not self.CURRENTLY_RUNNING:
             return
         
@@ -854,12 +873,17 @@ class AIHubServer:
         valid = await validate_prompt(self.CURRENTLY_RUNNING["id"], self.CURRENTLY_RUNNING["workflow"], None)
         
         if valid[0]:
+            await self.CURRENTLY_RUNNING["ws"].send_json({
+                'type': 'WORKFLOW_START',
+                'workflow_id': self.CURRENTLY_RUNNING["request"]["workflow_id"],
+                'id': self.CURRENTLY_RUNNING["id"],
+            })
             outputs_to_execute = valid[2]
             number = PromptServer.instance.number
             PromptServer.instance.number += 1
             PromptServer.instance.prompt_queue.put((number, self.CURRENTLY_RUNNING["id"], self.CURRENTLY_RUNNING["workflow"], {}, outputs_to_execute))
         else:
-            await self.send_json(self.CURRENTLY_RUNNING["ws"], {
+            await self.CURRENTLY_RUNNING["ws"].send_json({
                 'type': 'ERROR',
                 'workflow_id': self.CURRENTLY_RUNNING["request"]["workflow_id"],
                 'id': self.CURRENTLY_RUNNING["id"],
@@ -877,7 +901,7 @@ class AIHubServer:
             "type": "FILE",
             'workflow_id': workflow_id,
             'id': id,
-            "type": data_type,
+            "data_type": data_type,
             "action": action_data,
         })
         # Send the binary data itself
@@ -904,4 +928,53 @@ class AIHubServer:
         }
         if extra_data:
             data.update(extra_data)
-        return await self.send_json(self.CURRENTLY_RUNNING["ws"], data)
+        return await self.send_json(self.CURRENTLY_RUNNING["workflow_id"], self.CURRENTLY_RUNNING["id"], self.CURRENTLY_RUNNING["ws"], data)
+    
+    def send_binary_data_to_current_client_sync(self, binary_data, data_type, action):
+        future = asyncio.run_coroutine_threadsafe(
+            self.send_binary_data_to_current_client(binary_data, data_type, action),
+            self.loop
+        )
+        self.awaiting_tasks_lock.acquire()
+        self.awaiting_tasks_amount += 1
+        self.awaiting_tasks_lock.release()
+
+        def on_done(t):
+            self.awaiting_tasks_lock.acquire()
+            self.awaiting_tasks_amount -= 1
+            self.awaiting_tasks_lock.release()
+
+            if self.awaiting_tasks_amount == 0:
+                self.awaiting_tasks_done_flag.set()
+
+        future.add_done_callback(on_done)
+
+    def send_json_to_current_client_sync(self, data):
+        max_retries = 5
+        last_exc = None
+        for attempt in range(max_retries):
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+
+            if loop and loop.is_running():
+                # In event loop thread: must submit to loop from another thread
+                try:
+                    fut = asyncio.run_coroutine_threadsafe(
+                        self.send_json_to_current_client(data),
+                        loop
+                    )
+                    return fut.result()
+                except Exception as exc:
+                    last_exc = exc
+                    time.sleep(0.05)
+                    continue
+            else:
+                # Not in event loop: safe to block
+                try:
+                    return asyncio.run(self.send_json_to_current_client(data))
+                except Exception as exc:
+                    last_exc = exc
+                    time.sleep(0.05)
+                    continue

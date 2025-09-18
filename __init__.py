@@ -14,6 +14,7 @@ NODE_CLASS_MAPPINGS = {
     "AIHubExposeImageBatch": AIHubExposeImageBatch,
     "AIHubExposeScheduler": AIHubExposeScheduler,
     "AIHubExposeSampler": AIHubExposeSampler,
+    "AIHubExposeCfg": AIHubExposeCfg,
 
     "AIHubExposeConfigInteger": AIHubExposeConfigInteger,
     "AIHubExposeConfigFloat": AIHubExposeConfigFloat,
@@ -26,8 +27,10 @@ NODE_CLASS_MAPPINGS = {
     "AIHubPatchActionSetConfigString": AIHubPatchActionSetConfigString,
     
     "AIHubActionNewImage": AIHubActionNewImage,
+    "AIHubActionNewLayer": AIHubActionNewLayer,
 
-    "AIHubDevWebsocketDebug": AIHubDevWebsocketDebug,
+    "AIHubUtilsCropMergedImageToLayerSize": AIHubUtilsCropMergedImageToLayerSize,
+    "AIHubUtilsFitLayerToMergedImage": AIHubUtilsFitLayerToMergedImage,  
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -44,6 +47,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "AIHubExposeImageBatch": "AIHub Expose Image Batch",
     "AIHubExposeScheduler": "AIHub Expose Scheduler",
     "AIHubExposeSampler": "AIHub Expose Sampler",
+    "AIHubExposeCfg": "AIHub Expose CFG",
 
     "AIHubExposeConfigInteger": "AIHub Expose Config Integer",
     "AIHubExposeConfigFloat": "AIHub Expose Config Float",
@@ -51,13 +55,15 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "AIHubExposeConfigString": "AIHub Expose Config String",
 
     "AIHubActionNewImage": "AIHub Action New Image",
+    "AIHubActionNewLayer": "AIHub Action New Layer",
 
     "AIHubPatchActionSetConfigInteger": "AIHub Patch Action Set Config Integer",
     "AIHubPatchActionSetConfigFloat": "AIHub Patch Action Set Config Float",
     "AIHubPatchActionSetConfigBoolean": "AIHub Patch Action Set Config Boolean",
     "AIHubPatchActionSetConfigString": "AIHub Patch Action Set Config String",
 
-    "AIHubDevWebsocketDebug": "AIHub developer websocket debug",
+    "AIHubUtilsCropMergedImageToLayerSize": "AIHub Utils Crop Merged Image To Layer Size",
+    "AIHubUtilsFitLayerToMergedImage": "AIHub Utils Fit Layer To Merged Image",
 }
 
 __all__ = [
