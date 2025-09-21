@@ -143,19 +143,6 @@ class AIHubServer:
         """
         Retrieves all checkpoints json information from the aihub/models directory.
         checkpoint json files are expected to have the following attributes:
-        0. id: the unique id of the model, must be alphanumeric and underscores only
-        1. name: the name of the model as will be seen by the user
-        2. path: the path of the model as it exist within the comfyui models list
-        3. family: the family of the model, e.g. "stable-diffusion", "sdxl", "other"
-        4. context: the context of the model, e.g. "image", "video", "3d", "text", "audio"
-        5. default_cfg (optional): the default cfg value to use with this model
-        6. default_steps (optional): the default steps value to use with this model
-        7. default_sampler (optional): the default sampler to use with this model
-        8. default_scheduler (optional): the default scheduler to use with this model
-        9. vae_path: (optional) the path of the vae model as it exist within the comfyui vae list
-        10. clip_path: (optional) the path of the clip model as it exist within the comfyui clip list
-        11. lora_paths: (optional) a list of lora paths that will be applied to the model and the given weights as a dictionary of {path: "path", weight: float}
-        12. description: (optional) a description of the model
         """
 
         if (AIHUB_COLD and MODELS_CACHE_RAW is not None):
@@ -187,7 +174,6 @@ class AIHubServer:
     def retrieve_checkpoints_cleaned(self):
         """
         Retrieves all checkpoints json information but only what is important for the client.
-        basically id, name, family, context, default_cfg, default_steps, default_sampler, default_scheduler and description.
         """
 
         if (AIHUB_COLD and MODELS_CACHE_CLEANED is not None):
@@ -198,16 +184,27 @@ class AIHubServer:
 
         for model in raw_models:
             cleaned_model = {
-                "id": model.get("id", None),
-                "name": model.get("name", None),
-                "family": model.get("family", None),
-                "context": model.get("context", None),
-                "description": model.get("description", ""),
-                "default_cfg": model.get("default_cfg", None),
-                "default_steps": model.get("default_steps", None),
-                "default_sampler": model.get("default_sampler", None),
-                "default_scheduler": model.get("default_scheduler", None),
+                "id": model.get("id", None), #required
+                "file": model.get("file", None), # required the checkpoint file or diffusion model file
+                "vae_file": model.get("vae_file", None), #optional, the vae file to use with this model
+                "clip_file": model.get("clip_file", None), #optional, the clip file to use with this model, can be a comma separated list of two clips for using a dual clip
+                "clip_type": model.get("clip_type", None), #optional, the clip type to use with this model
+                "name": model.get("name", None), # required the name of the model as will be seen by the user
+                "group": model.get("group", None), # optional, a group name to group models together, can also be used to limit loras
+                "family": model.get("family", None), # required the family of the model, e.g. "stable-diffusion", "sdxl", "other" these are used to limit loras
+                "context": model.get("context", None), # required the context of the model, e.g. "image", "video", "3d", "text", "audio" these are used to limit models depending on the context
+                "is_diffusion_model": model.get("is_diffusion_model", None), # required, boolean, if true it will be loaded as a diffusion model instead of a checkpoint
+                "diffusion_model_weight_dtype": model.get("diffusion_model_weight_dtype", "default"), # optional, if is_diffusion_model is true, this can be used to specify the weight dtype to use when loading the diffusion model
+                "description": model.get("description", ""), # required, a description of the model
+                "default_cfg": model.get("default_cfg", None), # optional, the default cfg value to use with this model
+                "default_steps": model.get("default_steps", None), # optional, the default steps value to use with this model
+                "default_sampler": model.get("default_sampler", None), # optional, the default sampler to use with this model
+                "default_scheduler": model.get("default_scheduler", None), # optional, the default scheduler to use with this model
             }
+            # check if invalid model if it doesn't have all the required properties
+            if not all(key in cleaned_model for key in ["id", "file", "name", "family", "context", "description", "is_diffusion_model"]):
+                print(f"Invalid model found: {json.dumps(cleaned_model)}")
+                continue
             cleaned_models.append(cleaned_model)
 
         if AIHUB_COLD:
@@ -218,16 +215,6 @@ class AIHubServer:
     def retrieve_loras_raw(self):
         """
         Retrieves all loras information from the aihub/loras directory.
-        
-        lora json files are expected to have the following attributes:
-        
-        0. id: the unique id of the lora, must be alphanumeric and underscores only
-        1. name: the name of the lora as will be seen by the user
-        2. path: the path of the lora as it exist within the comfyui loras list
-        3. family: the family of the checkpoint this lora should apply to, e.g. "stable-diffusion", "sdxl", "other"
-        4. context: the context of the checkpoint this lora should apply to, e.g. "image", "video", "3d", "text", "audio"
-        5. default_strength: (optional) the default strength value to use with this lora
-        6. force_model: (optional) a string that specifies that this lora will only be allowed to be used with the specified checkpoint id
         """
 
         if (AIHUB_COLD and LORAS_CACHE_RAW is not None):
@@ -270,14 +257,21 @@ class AIHubServer:
 
         for lora in raw_loras:
             cleaned_lora = {
-                "id": lora.get("id", None),
-                "name": lora.get("name", None),
-                "family": lora.get("family", None),
-                "context": lora.get("context", None),
-                "description": lora.get("description", ""),
-                "default_strength": lora.get("default_strength", None),
-                "force_model": lora.get("force_model", None),
+                "id": lora.get("id", None), # required, the unique identifier for the lora
+                "file": lora.get("file", None), # required, the lora filename in the loras directory
+                "name": lora.get("name", None), # required, the name of the lora as will be seen by the user
+                "context": lora.get("context", None), #required, the context in which this lora can be used, e.g. "image", "video", "3d", "text", "audio"
+                "description": lora.get("description", ""), #required a description of the lora
+                "default_strength": lora.get("default_strength", None), #optional, the default strength the lora will have when applied
+                "limit_to_model": lora.get("limit_to_model", None), #optional, limits to a specific model id
+                "limit_to_family": lora.get("limit_to_family", None), #required, limits to which family this lora can be applied
+                "limit_to_group": lora.get("limit_to_group", None), #optional, limits to which model group this lora can be applied
+                "use_loader_model_only": lora.get("use_loader_model_only", False), # if true, the lora will use the LoaderModelOnly node to load the lora and apply it to the model, so it will not affect the clip embeddings
             }
+            # check if invalid lora if it doesn't have all the required properties
+            if not all(key in cleaned_lora for key in ["id", "file", "name", "context", "description", "limit_to_family"]):
+                print(f"Invalid LORA found: {json.dumps(cleaned_lora)}")
+                continue
             cleaned_loras.append(cleaned_lora)
 
         if AIHUB_COLD:

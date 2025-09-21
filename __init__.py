@@ -15,6 +15,7 @@ NODE_CLASS_MAPPINGS = {
     "AIHubExposeScheduler": AIHubExposeScheduler,
     "AIHubExposeSampler": AIHubExposeSampler,
     "AIHubExposeCfg": AIHubExposeCfg,
+    "AIHubExposeModel": AIHubExposeModel,
 
     "AIHubExposeConfigInteger": AIHubExposeConfigInteger,
     "AIHubExposeConfigFloat": AIHubExposeConfigFloat,
@@ -48,6 +49,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "AIHubExposeScheduler": "AIHub Expose Scheduler",
     "AIHubExposeSampler": "AIHub Expose Sampler",
     "AIHubExposeCfg": "AIHub Expose CFG",
+    "AIHubExposeModel": "AIHub Expose Model",
 
     "AIHubExposeConfigInteger": "AIHub Expose Config Integer",
     "AIHubExposeConfigFloat": "AIHub Expose Config Float",

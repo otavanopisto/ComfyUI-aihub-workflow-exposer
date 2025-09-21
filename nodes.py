@@ -1,6 +1,6 @@
 import io
 import os
-from nodes import LoadImage
+from nodes import LoadImage, CheckpointLoaderSimple, LoraLoader, UNETLoader, LoraLoaderModelOnly, VAELoader, CLIPLoader, DualCLIPLoader
 import json
 import torch
 import random
@@ -121,10 +121,11 @@ class AIHubExposeSteps:
                 "value": ("INT", {"default": 10}),
                 "advanced": ("BOOLEAN", {"default": False, "tooltip": "If set to true, it will make this option be hidden under advanced options for this workflow"}),
                 "index": ("INT", {"default": 0, "tooltip": "this value is used for sorting the input fields when displaying, lower values will appear first"}),
+                "unaffected_by_model_steps": ("BOOLEAN", {"default": False, "tooltip": "If set to true, this steps value will not be affected by the model's default steps"}),
             }
         }
 
-    def get_exposed_steps(self, label, tooltip, value, description, advanced, index):
+    def get_exposed_steps(self, label, tooltip, value, description, advanced, index, unaffected_by_model_steps):
         if (value < 0):
             raise ValueError(f"Error: {id} should be greater or equal to {0}")
         if (value > 150):
@@ -209,10 +210,11 @@ class AIHubExposeCfg:
                 "value": ("FLOAT", {"default": 3.0}),
                 "advanced": ("BOOLEAN", {"default": False, "tooltip": "If set to true, it will make this option be hidden under advanced options for this workflow."}),
                 "index": ("INT", {"default": 0, "tooltip": "This value is used for sorting the input fields when displaying; lower values will appear first."}),
+                "unaffected_by_model_cfg": ("BOOLEAN", {"default": False, "tooltip": "If set to true, this cfg value will not be affected by the model's default cfg"}),
             }
         }
 
-    def get_exposed_cfg(self, id, label, tooltip, value, advanced, index):
+    def get_exposed_cfg(self, id, label, tooltip, value, advanced, index, unaffected_by_model_cfg):
         if (value < 0.0):
             raise ValueError(f"Error: {id} should be greater or equal to {0.0}")
         if (value > 100.0):
@@ -346,6 +348,10 @@ class AIHubExposeConfigString:
         return (value if value is not None else default,)
 
 class AIHubExposeStringSelection:
+    """
+    A utility node for exposing a string that can be selected from a list of strings of options.
+    """
+
     CATEGORY = "aihub/expose"
     FUNCTION = "get_exposed_selection"
     RETURN_TYPES = ("STRING",)
@@ -372,6 +378,11 @@ class AIHubExposeStringSelection:
         return (value,)
     
 class AIHubExposeSeed:
+    """
+    A utility node for exposing a configurable seed to ensure that there are changes in the workflow
+    that require a seed to be set
+    """
+
     CATEGORY = "aihub/expose"
     FUNCTION = "get_exposed_seed"
     RETURN_TYPES = ("INT",)
@@ -383,20 +394,19 @@ class AIHubExposeSeed:
                 "id": ("STRING", {"default": "seed", "tooltip": "A unique custom id for this workflow."}),
                 "label": ("STRING", {"default": "Seed", "tooltip": "This is the label that will appear in the field."}),
                 "tooltip": ("STRING", {"default": "", "tooltip": "An optional tooltip"}),
-                "value": (["random", "fixed"], {"default": "random", "tooltip": "Choose whether to use a random or a fixed seed."}),
-                "value_fixed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
+                "value": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
                 "advanced": ("BOOLEAN", {"default": False, "tooltip": "If set to true, this option will be hidden under advanced options for this workflow."}),
                 "index": ("INT", {"default": 0, "tooltip": "This value is used for sorting the input fields when displaying; lower values will appear first."}),
             }
         }
 
-    def get_exposed_seed(self, id, label, tooltip, value, value_fixed, advanced, index):
-        if value == "random":
-            return (random.randint(0, 0xffffffffffffffff),)
-        else:
-            return (value_fixed,)
+    def get_exposed_seed(self, id, label, tooltip, value, advanced, index):
+        return value
         
 class AIHubExposeSampler:
+    """
+    An utility to expose the sampler to be selected
+    """
     CATEGORY = "aihub/expose"
     FUNCTION = "get_exposed_sampler"
     RETURN_TYPES = (comfy.samplers.KSampler.SAMPLERS,)
@@ -412,15 +422,19 @@ class AIHubExposeSampler:
                 "value": (comfy.samplers.KSampler.SAMPLERS, {"tooltip": "Choose the sampler to use"}),
                 "advanced": ("BOOLEAN", {"default": False, "tooltip": "If set to true, this option will be hidden under advanced options for this workflow."}),
                 "index": ("INT", {"default": 0, "tooltip": "This value is used for sorting the input fields when displaying; lower values will appear first."}),
+                "unaffected_by_model_sampler": ("BOOLEAN", {"default": False, "tooltip": "If set to true, this sampler value will not be affected by the model's default sampler"}),
             }
         }
 
-    def get_exposed_sampler(self, id, label, tooltip, value, value_fixed, advanced, index):
+    def get_exposed_sampler(self, id, label, tooltip, value, advanced, index, unaffected_by_model_sampler):
         return value
     
 class AIHubExposeScheduler:
+    """
+    An utility to expose the scheduler to be selected
+    """
     CATEGORY = "aihub/expose"
-    FUNCTION = "get_exposed_sampler"
+    FUNCTION = "get_exposed_scheduler"
     RETURN_TYPES = (comfy.samplers.KSampler.SCHEDULERS,)
     RETURN_NAMES = ("SCHEDULER",)
     
@@ -434,13 +448,17 @@ class AIHubExposeScheduler:
                 "value": (comfy.samplers.KSampler.SCHEDULERS, {"tooltip": "Choose the scheduler to use"}),
                 "advanced": ("BOOLEAN", {"default": False, "tooltip": "If set to true, this option will be hidden under advanced options for this workflow."}),
                 "index": ("INT", {"default": 0, "tooltip": "This value is used for sorting the input fields when displaying; lower values will appear first."}),
+                "unaffected_by_model_scheduler": ("BOOLEAN", {"default": False, "tooltip": "If set to true, this scheduler value will not be affected by the model's default scheduler"}),
             }
         }
 
-    def get_exposed_sampler(self, id, label, tooltip, value, value_fixed, advanced, index):
+    def get_exposed_scheduler(self, id, label, tooltip, value, advanced, index, unaffected_by_model_scheduler):
         return value
 
 class AIHubExposeImage:
+    """
+    An utility to expose an image to be used in the workflow
+    """
     CATEGORY = "aihub/expose"
     FUNCTION = "get_exposed_image"
     
@@ -497,6 +515,9 @@ class AIHubExposeImage:
         return (image, mask, pos_x, pos_y, layer_id, width, height,)
     
 class AIHubExposeImageInfoOnly:
+    """
+    An utility to expose an image (info only) to be used in the workflow
+    """
     CATEGORY = "aihub/expose"
     FUNCTION = "get_exposed_image_info_only"
     
@@ -534,6 +555,9 @@ class AIHubExposeImageInfoOnly:
         return (pos_x, pos_y, layer_id, width, height,)
     
 class AIHubExposeImageBatch:
+    """
+    An utility to expose an image batch to be used in the workflow
+    """
     CATEGORY = "aihub/expose"
     FUNCTION = "get_exposed_image_batch"
     
@@ -607,6 +631,107 @@ class AIHubExposeImageBatch:
             raise ValueError("You must specify either local_files or the values of the images for this node to function")
         
         return (image_batch, masks,)
+    
+class AIHubExposeModel:
+    """
+    An utility to expose a model to be used in the workflow
+    loras will be applied as well if they are defined
+    as allowable by the model
+
+    The model exposer is quite complicated as it combines a lot of loaders into a single compact package
+    and it does so because it has to be able to handle a lot of different scenarios
+
+    It doesn't have UI autocomplete in comfy itself for the models or loras, however you can leave the following fields blank as
+    doing so will just make the client side UI pick the first one it gets as default
+
+    model, loras, loras_strengths, loras_use_loader_model_only, is_diffusion_model, diffusion_model_weight_dtype, optional_vae, optional_clip, optional_clip_type
+    """
+    CATEGORY = "aihub/expose"
+    FUNCTION = "get_exposed_model"
+    
+    RETURN_TYPES = ("MODEL", "CLIP", "VAE")
+    RETURN_NAMES = ("MODEL", "CLIP", "VAE",)
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "id": ("STRING", {"default": "exposed_model", "tooltip": "A unique custom id for this workflow (it should be unique)"}),
+                "label": ("STRING", {"default": "Model", "tooltip": "This is the label that will appear in the field"}),
+                "model": ("STRING", {"default": "", "tooltip": "The default model to use as base for this workflow"}),
+                "loras": ("STRING", {"default": "", "tooltip": "The default, comma separated list of loras to apply to this model"}),
+                "loras_strengths": ("STRING", {"default": "", "tooltip": "The default, comma separated list of lora strengths to apply to this model, it must match the number of loras given"}),
+                "loras_use_loader_model_only": ("STRING", {"default": "", "tooltip": "The default, comma separated list of booleans for the loras, 't' or 'f' to apply only to the model and not the clip, it must match the number of loras given"}),
+                "is_diffusion_model": ("BOOLEAN", {"default": True, "tooltip": "If set to true, it will load the model from the diffusion_models folder, if false it will load it from the checkpoints folder"}),
+                "diffusion_model_weight_dtype": (["default", "fp8_e4m3fn", "fp8_e4m3fn_fast", "fp8_e5m2"], {"default": "default", "tooltip": "The weight dtype to use when loading the diffusion model, this is only used if is_diffusion_model is true"}),
+                "limit_to_family": ("STRING", {"default": "", "tooltip": "The family of the model to be loaded is limited by this value"}),
+                "limit_to_group": ("STRING", {"default": "", "tooltip": "The group of the model to be loaded is limited by this value"}),
+                "tooltip": ("STRING", {"default": "", "tooltip": "An optional tooltip"}),
+                "advanced": ("BOOLEAN", {"default": False, "tooltip": "If set to true, it will make this option be hidden under advanced options for this workflow"}),
+                "index": ("INT", {"default": 0, "tooltip": "This value is used for sorting the input fields when displaying; lower values will appear first."}),
+                "disable_loras_selection": ("BOOLEAN", {"default": False, "tooltip": "If set to true, it will disable the loras selection field in the UI"}),
+                "disable_checkpoint_selection": ("BOOLEAN", {"default": False, "tooltip": "If set to true, it will disable the checkpoint selection field in the UI"}),
+            },
+            "optional": {
+                "optional_vae": ("STRING", {"default": "", "tooltip": "The default for an optional VAE to load, if not given the VAE from the checkpoint will be used if available"}),
+                "optional_clip": ("STRING", {"default": "", "tooltip": "The default for an optional CLIP to load, if not given the CLIP from the checkpoint will be used if available"}),
+                "optional_clip_type": ("STRING", {"default": "", "tooltip": "The default for an optional CLIP to load, if not given the CLIP from the checkpoint will be used if available"}),
+            }
+        }
+
+    def get_exposed_model(self, id, label, model, loras, loras_strengths, loras_use_loader_model_only, is_diffusion_model, diffusion_model_weight_dtype, limit_to_family, limit_to_group, tooltip, advanced, index,
+                          disable_loras_selection, disable_checkpoint_selection, optional_vae=None, optional_clip=None, optional_clip_type=None):
+        # first lets load the checkpoint using the comfy CheckpointLoaderSimple
+        model = None
+        clip = None
+        vae = None
+        if model:
+            if is_diffusion_model:
+                loader = UNETLoader()
+                model, = loader.load_unet(model, diffusion_model_weight_dtype)
+            else:
+                loader = CheckpointLoaderSimple()
+                model, clip, vae = loader.load_checkpoint(model)
+            
+            if model is None:
+                raise ValueError(f"Error: Could not load the model checkpoint: {model}")
+            
+            # now we have to apply the loras if given
+            if loras:
+                lora_list = [l.strip() for l in loras.split(",") if l.strip()]
+                strengths_list = [float(s.strip()) for s in loras_strengths.split(",") if s.strip()]
+                use_loader_model_only_list = [s.strip() == "t" for s in loras_use_loader_model_only.split(",")]
+                if len(strengths_list) != len(lora_list):
+                    raise ValueError("Error: The number of lora strengths must match the number of loras")
+                if len(use_loader_model_only_list) != len(lora_list):
+                    raise ValueError("Error: The number of lora_use_loader_model_only values must match the number of loras")
+                for lora, strength, use_loader_model_only in zip(lora_list, strengths_list, use_loader_model_only_list):
+                    if not use_loader_model_only:
+                        lora_loader = LoraLoader()
+                        model, clip = lora_loader.load_lora(model, clip, lora, strength, strength)
+                    else:
+                        lora_loader = LoraLoaderModelOnly()
+                        model, = lora_loader.load_lora_model_only(model, lora, strength)
+
+        if optional_vae is not None and optional_vae.strip() != "":
+            vae_loader = VAELoader()
+            vae = vae_loader.load_vae(optional_vae)
+
+        if optional_clip is not None and optional_clip.strip() != "":
+            if optional_clip_type is None or optional_clip_type.strip() == "":
+                raise ValueError("Error: If optional_clip is given, optional_clip_type must be given as well")
+            # now we need to comma separate to check if we have multiple clips to merge, we only take the first two in case
+            # of multiple because that is the default to use DualClip
+            if "," in optional_clip:
+                clips = [c.strip() for c in optional_clip.split(",") if c.strip()]
+                clips = clips[:2]
+                clip_loader = DualCLIPLoader()
+                clip = clip_loader.load_clip(clips[0], clips[1], optional_clip_type)
+            else:
+                clip_loader = CLIPLoader()
+                clip = clip_loader.load_clip(optional_clip, optional_clip_type)
+
+        return (model, clip, vae,)
 
 ## Actions
 class AIHubActionNewImage:
@@ -1026,3 +1151,55 @@ class AIHubUtilsFitLayerToMergedImage:
             cropped_mask = layer_mask[:, crop_y1:crop_y2, crop_x1:crop_x2]
 
         return (cropped_image, cropped_mask, new_x1, new_y1, new_width, new_height)
+    
+class AIHubUtilsStrToInt:
+    """
+    A utility node for converting a string to an integer
+    """
+
+    CATEGORY = "aihub/utils"
+    FUNCTION = "str_to_int"
+
+    RETURN_TYPES = ("INT",)
+    RETURN_NAMES = ("INT",)
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "value": ("STRING", {"default": "0", "tooltip": "The string to convert to an integer"}),
+            }
+        }
+
+    def str_to_int(self, value):
+        try:
+            int_value = int(value)
+        except ValueError:
+            raise ValueError(f"Error: Could not convert string to integer: {value}")
+        return (int_value,)
+    
+class AIHubUtilsStrToFloat:
+    """
+    A utility node for converting a string to a float
+    """
+
+    CATEGORY = "aihub/utils"
+    FUNCTION = "str_to_float"
+
+    RETURN_TYPES = ("FLOAT",)
+    RETURN_NAMES = ("FLOAT",)
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "value": ("STRING", {"default": "0.0", "tooltip": "The string to convert to a float"}),
+            }
+        }
+
+    def str_to_float(self, value):
+        try:
+            float_value = float(value)
+        except ValueError:
+            raise ValueError(f"Error: Could not convert string to float: {value}")
+        return (float_value,)
