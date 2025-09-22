@@ -115,8 +115,8 @@ class AIHubExposeSteps:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "id": ("STRING", {"default": "exposed_integer", "tooltip": "A unique custom id for this workflow (it should be unique)"}),
-                "label": ("STRING", {"default": "Exposed Integer", "tooltip": "This is the label that will appear in the field"}),
+                "id": ("STRING", {"default": "steps", "tooltip": "A unique custom id for this workflow (it should be unique)"}),
+                "label": ("STRING", {"default": "Steps", "tooltip": "This is the label that will appear in the field"}),
                 "tooltip": ("STRING", {"default": "", "tooltip": "An optional tooltip"}),
                 "value": ("INT", {"default": 10}),
                 "advanced": ("BOOLEAN", {"default": False, "tooltip": "If set to true, it will make this option be hidden under advanced options for this workflow"}),
@@ -125,7 +125,7 @@ class AIHubExposeSteps:
             }
         }
 
-    def get_exposed_steps(self, label, tooltip, value, description, advanced, index, unaffected_by_model_steps):
+    def get_exposed_steps(self, id, label, tooltip, value, advanced, index, unaffected_by_model_steps):
         if (value < 0):
             raise ValueError(f"Error: {id} should be greater or equal to {0}")
         if (value > 150):
@@ -173,14 +173,15 @@ class AIHubExposeFloat:
                 "tooltip": ("STRING", {"default": "", "tooltip": "An optional tooltip."}),
                 "min": ("FLOAT", {"default": 0.0}),
                 "max": ("FLOAT", {"default": 1.0}),
-                "step": ("FLOAT", {"default": 0.01}),
+                "step": ("FLOAT", {"default": 0.05, "tooltip": "The step value for the float input.", "min": 0.001, "max": 1.0, "step": 0.001}),
                 "value": ("FLOAT", {"default": 0.5}),
                 "advanced": ("BOOLEAN", {"default": False, "tooltip": "If set to true, it will make this option be hidden under advanced options for this workflow."}),
                 "index": ("INT", {"default": 0, "tooltip": "This value is used for sorting the input fields when displaying; lower values will appear first."}),
+                "slider": ("BOOLEAN", {"default": False, "tooltip": "If set to true, this float will be represented as a slider in the UI."}),
             }
         }
 
-    def get_exposed_float(self, id, label, tooltip, min, max, step, value, advanced, index):
+    def get_exposed_float(self, id, label, tooltip, min, max, step, value, advanced, index, slider):
         if (value < min):
             raise ValueError(f"Error: {id} should be greater or equal to {min}")
         if (value > max):
@@ -204,8 +205,8 @@ class AIHubExposeCfg:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "id": ("STRING", {"default": "float", "tooltip": "A unique custom id for this workflow."}),
-                "label": ("STRING", {"default": "Float", "tooltip": "This is the label that will appear in the field."}),
+                "id": ("STRING", {"default": "cfg", "tooltip": "A unique custom id for this workflow."}),
+                "label": ("STRING", {"default": "Cfg", "tooltip": "This is the label that will appear in the field."}),
                 "tooltip": ("STRING", {"default": "", "tooltip": "An optional tooltip."}),
                 "value": ("FLOAT", {"default": 3.0}),
                 "advanced": ("BOOLEAN", {"default": False, "tooltip": "If set to true, it will make this option be hidden under advanced options for this workflow."}),
@@ -401,7 +402,7 @@ class AIHubExposeSeed:
         }
 
     def get_exposed_seed(self, id, label, tooltip, value, advanced, index):
-        return value
+        return (value, )
         
 class AIHubExposeSampler:
     """
@@ -427,7 +428,7 @@ class AIHubExposeSampler:
         }
 
     def get_exposed_sampler(self, id, label, tooltip, value, advanced, index, unaffected_by_model_sampler):
-        return value
+        return (value, )
     
 class AIHubExposeScheduler:
     """
@@ -445,7 +446,7 @@ class AIHubExposeScheduler:
                 "id": ("STRING", {"default": "scheduler", "tooltip": "A unique custom id for this workflow."}),
                 "label": ("STRING", {"default": "Scheduler", "tooltip": "This is the label that will appear in the field."}),
                 "tooltip": ("STRING", {"default": "", "tooltip": "An optional tooltip"}),
-                "value": (comfy.samplers.KSampler.SCHEDULERS, {"tooltip": "Choose the scheduler to use"}),
+                "value": (comfy.samplers.KSampler.SCHEDULERS, {"tooltip": "The default value for the scheduler to use, can be any string"}),
                 "advanced": ("BOOLEAN", {"default": False, "tooltip": "If set to true, this option will be hidden under advanced options for this workflow."}),
                 "index": ("INT", {"default": 0, "tooltip": "This value is used for sorting the input fields when displaying; lower values will appear first."}),
                 "unaffected_by_model_scheduler": ("BOOLEAN", {"default": False, "tooltip": "If set to true, this scheduler value will not be affected by the model's default scheduler"}),
@@ -453,7 +454,36 @@ class AIHubExposeScheduler:
         }
 
     def get_exposed_scheduler(self, id, label, tooltip, value, advanced, index, unaffected_by_model_scheduler):
-        return value
+        return (value, )
+    
+class AIHubExposeExtendableScheduler:
+    """
+    An utility to expose the scheduler to be selected
+    """
+    CATEGORY = "aihub/expose"
+    FUNCTION = "get_exposed_scheduler"
+    RETURN_TYPES = ("*",)
+    RETURN_NAMES = ("SCHEDULER",)
+    
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "id": ("STRING", {"default": "scheduler", "tooltip": "A unique custom id for this workflow."}),
+                "label": ("STRING", {"default": "Scheduler", "tooltip": "This is the label that will appear in the field."}),
+                "tooltip": ("STRING", {"default": "", "tooltip": "An optional tooltip"}),
+                "value": ("STRING", {"tooltip": "The default value for the scheduler, can be any string"}),
+                "advanced": ("BOOLEAN", {"default": False, "tooltip": "If set to true, this option will be hidden under advanced options for this workflow."}),
+                "index": ("INT", {"default": 0, "tooltip": "This value is used for sorting the input fields when displaying; lower values will appear first."}),
+                "unaffected_by_model_scheduler": ("BOOLEAN", {"default": False, "tooltip": "If set to true, this scheduler value will not be affected by the model's default scheduler"}),
+                "blacklist": ("STRING", {"default": "", "tooltip": "A newline separated list of schedulers that should not be selectable", "multiline": True}),
+                "blacklist_all": ("BOOLEAN", {"default": False, "tooltip": "If set to true, it will blacklist all the schedulers"}),
+                "extras": ("STRING", {"default": "", "tooltip": "A newline separated list of extra schedulers that will be added to what is left", "multiline": True}),
+            }
+        }
+
+    def get_exposed_scheduler(self, id, label, tooltip, value, advanced, index, unaffected_by_model_scheduler, blacklist, blacklist_all, extras):
+        return (value, )
 
 class AIHubExposeImage:
     """
@@ -682,18 +712,20 @@ class AIHubExposeModel:
     def get_exposed_model(self, id, label, model, loras, loras_strengths, loras_use_loader_model_only, is_diffusion_model, diffusion_model_weight_dtype, limit_to_family, limit_to_group, tooltip, advanced, index,
                           disable_loras_selection, disable_checkpoint_selection, optional_vae=None, optional_clip=None, optional_clip_type=None):
         # first lets load the checkpoint using the comfy CheckpointLoaderSimple
-        model = None
+        model_loaded = None
         clip = None
         vae = None
         if model:
             if is_diffusion_model:
+                print("Using UNETLoader to load the diffusion model " + str(model) + " with weight dtype " + str(diffusion_model_weight_dtype))
                 loader = UNETLoader()
-                model, = loader.load_unet(model, diffusion_model_weight_dtype)
+                model_loaded, = loader.load_unet(model, diffusion_model_weight_dtype)
             else:
+                print("Using CheckpointLoaderSimple to load the model " + str(model))
                 loader = CheckpointLoaderSimple()
-                model, clip, vae = loader.load_checkpoint(model)
+                model_loaded, clip, vae = loader.load_checkpoint(model)
             
-            if model is None:
+            if model_loaded is None:
                 raise ValueError(f"Error: Could not load the model checkpoint: {model}")
             
             # now we have to apply the loras if given
@@ -707,15 +739,20 @@ class AIHubExposeModel:
                     raise ValueError("Error: The number of lora_use_loader_model_only values must match the number of loras")
                 for lora, strength, use_loader_model_only in zip(lora_list, strengths_list, use_loader_model_only_list):
                     if not use_loader_model_only:
+                        print(f"Applying lora {lora} with strength {strength} to model and clip")
                         lora_loader = LoraLoader()
-                        model, clip = lora_loader.load_lora(model, clip, lora, strength, strength)
+                        model_loaded, clip = lora_loader.load_lora(model_loaded, clip, lora, strength, strength)
                     else:
+                        print(f"Applying lora {lora} with strength {strength} to model only")
                         lora_loader = LoraLoaderModelOnly()
-                        model, = lora_loader.load_lora_model_only(model, lora, strength)
+                        model_loaded, = lora_loader.load_lora_model_only(model_loaded, lora, strength)
+        else:
+            print("No model specified so it cannot be loaded")
 
         if optional_vae is not None and optional_vae.strip() != "":
+            print("Using VAELoader to load the VAE " + str(optional_vae))
             vae_loader = VAELoader()
-            vae = vae_loader.load_vae(optional_vae)
+            (vae,) = vae_loader.load_vae(optional_vae)
 
         if optional_clip is not None and optional_clip.strip() != "":
             if optional_clip_type is None or optional_clip_type.strip() == "":
@@ -725,13 +762,16 @@ class AIHubExposeModel:
             if "," in optional_clip:
                 clips = [c.strip() for c in optional_clip.split(",") if c.strip()]
                 clips = clips[:2]
+                print(f"Using DualCLIPLoader to load the CLIPs {clips[0]} and {clips[1]} with type {optional_clip_type}")
                 clip_loader = DualCLIPLoader()
-                clip = clip_loader.load_clip(clips[0], clips[1], optional_clip_type)
+                (clip,) = clip_loader.load_clip(clips[0], clips[1], optional_clip_type)
             else:
+                print(type(optional_clip))
+                print(f"Using CLIPLoader to load the CLIP {optional_clip} with type {optional_clip_type}")
                 clip_loader = CLIPLoader()
-                clip = clip_loader.load_clip(optional_clip, optional_clip_type)
+                (clip,) = clip_loader.load_clip(optional_clip, optional_clip_type)
 
-        return (model, clip, vae,)
+        return (model_loaded, clip, vae,)
 
 ## Actions
 class AIHubActionNewImage:
@@ -880,7 +920,7 @@ class AIHubActionSetProgressStatus:
             },
         )
 
-        return (value)
+        return (value, )
     
 # Actions that are considered patches
 # running these actions should create a patch to the project

@@ -864,27 +864,43 @@ class AIHubServer:
             return
         
         print("Processing current workflow...")
-        valid = await validate_prompt(self.CURRENTLY_RUNNING["id"], self.CURRENTLY_RUNNING["workflow"], None)
+        # we will disable validation because it is not really useful (let it crash if the workflow is invalid, these should be curated workflows already)
+        # and the original validate_prompt function is not good at validating because it makes errors where
+        # there shouldn't be any so we use a custom function to fix this behaviour
+
+        #valid = await validate_prompt(self.CURRENTLY_RUNNING["id"], self.CURRENTLY_RUNNING["workflow"], None)
+        #print(valid)
         
-        if valid[0]:
-            await self.CURRENTLY_RUNNING["ws"].send_json({
-                'type': 'WORKFLOW_START',
-                'workflow_id': self.CURRENTLY_RUNNING["request"]["workflow_id"],
-                'id': self.CURRENTLY_RUNNING["id"],
-            })
-            outputs_to_execute = valid[2]
-            number = PromptServer.instance.number
-            PromptServer.instance.number += 1
-            PromptServer.instance.prompt_queue.put((number, self.CURRENTLY_RUNNING["id"], self.CURRENTLY_RUNNING["workflow"], {}, outputs_to_execute))
-        else:
-            await self.CURRENTLY_RUNNING["ws"].send_json({
-                'type': 'ERROR',
-                'workflow_id': self.CURRENTLY_RUNNING["request"]["workflow_id"],
-                'id': self.CURRENTLY_RUNNING["id"],
-                'node_errors': valid[3],
-                'message': f'Error validating workflow: {valid[1]}'
-            })
-            self.CURRENTLY_RUNNING = None
+        #if valid[0]:
+        await self.CURRENTLY_RUNNING["ws"].send_json({
+            'type': 'WORKFLOW_START',
+            'workflow_id': self.CURRENTLY_RUNNING["request"]["workflow_id"],
+            'id': self.CURRENTLY_RUNNING["id"],
+        })
+        #outputs_to_execute = valid[2]
+        # we will however need to find all the output nodes to know which ones to execute
+        # for that we will have to find for all actionable nodes (nodes that start with AIHubAction)
+        # and get their ids, then we will pass those ids to the prompt queue to execute
+
+        outputs_to_execute = []
+        for key, node in self.CURRENTLY_RUNNING["workflow"].items():
+            if node.get("class_type", "").startswith("AIHubAction"):
+                outputs_to_execute.append(key)
+
+        print(f"Executing workflow expecting {len(outputs_to_execute)} output nodes.", outputs_to_execute)
+
+        number = PromptServer.instance.number
+        PromptServer.instance.number += 1
+        PromptServer.instance.prompt_queue.put((number, self.CURRENTLY_RUNNING["id"], self.CURRENTLY_RUNNING["workflow"], {}, outputs_to_execute))
+        #else:
+        #    await self.CURRENTLY_RUNNING["ws"].send_json({
+        #        'type': 'ERROR',
+        #        'workflow_id': self.CURRENTLY_RUNNING["request"]["workflow_id"],
+        #        'id': self.CURRENTLY_RUNNING["id"],
+        #        'node_errors': valid[3],
+        #        'message': f'Error validating workflow: {json.dumps(valid[1])}',
+        #    })
+        #    self.CURRENTLY_RUNNING = None
 
     async def send_binary_data(self, workflow_id, id, ws, binary_data, data_type, action_data):
         """

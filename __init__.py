@@ -13,8 +13,10 @@ NODE_CLASS_MAPPINGS = {
     "AIHubExposeImageInfoOnly": AIHubExposeImageInfoOnly,
     "AIHubExposeImageBatch": AIHubExposeImageBatch,
     "AIHubExposeScheduler": AIHubExposeScheduler,
+    "AIHubExposeExtendableScheduler": AIHubExposeExtendableScheduler,
     "AIHubExposeSampler": AIHubExposeSampler,
     "AIHubExposeCfg": AIHubExposeCfg,
+    "AIHubExposeSteps": AIHubExposeSteps,
     "AIHubExposeModel": AIHubExposeModel,
 
     "AIHubExposeConfigInteger": AIHubExposeConfigInteger,
@@ -31,7 +33,7 @@ NODE_CLASS_MAPPINGS = {
     "AIHubActionNewLayer": AIHubActionNewLayer,
 
     "AIHubUtilsCropMergedImageToLayerSize": AIHubUtilsCropMergedImageToLayerSize,
-    "AIHubUtilsFitLayerToMergedImage": AIHubUtilsFitLayerToMergedImage,  
+    "AIHubUtilsFitLayerToMergedImage": AIHubUtilsFitLayerToMergedImage,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -47,8 +49,10 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "AIHubExposeImageInfoOnly": "AIHub Expose Image (Info Only)",
     "AIHubExposeImageBatch": "AIHub Expose Image Batch",
     "AIHubExposeScheduler": "AIHub Expose Scheduler",
+    "AIHubExposeExtendableScheduler": "AIHub Expose Extendable Scheduler",
     "AIHubExposeSampler": "AIHub Expose Sampler",
     "AIHubExposeCfg": "AIHub Expose CFG",
+    "AIHubExposeSteps": "AIHub Expose Steps",
     "AIHubExposeModel": "AIHub Expose Model",
 
     "AIHubExposeConfigInteger": "AIHub Expose Config Integer",
