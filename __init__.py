@@ -19,16 +19,16 @@ NODE_CLASS_MAPPINGS = {
     "AIHubExposeSteps": AIHubExposeSteps,
     "AIHubExposeModel": AIHubExposeModel,
 
-    "AIHubExposeConfigInteger": AIHubExposeConfigInteger,
-    "AIHubExposeConfigFloat": AIHubExposeConfigFloat,
-    "AIHubExposeConfigBoolean": AIHubExposeConfigBoolean,
-    "AIHubExposeConfigString": AIHubExposeConfigString,
+    "AIHubExposeProjectConfigInteger": AIHubExposeProjectConfigInteger,
+    "AIHubExposeProjectConfigFloat": AIHubExposeProjectConfigFloat,
+    "AIHubExposeProjectConfigBoolean": AIHubExposeProjectConfigBoolean,
+    "AIHubExposeProjectConfigString": AIHubExposeProjectConfigString,
 
-    "AIHubPatchActionSetConfigInteger": AIHubPatchActionSetConfigInteger,
-    "AIHubPatchActionSetConfigFloat": AIHubPatchActionSetConfigFloat,
-    "AIHubPatchActionSetConfigBoolean": AIHubPatchActionSetConfigBoolean,
-    "AIHubPatchActionSetConfigString": AIHubPatchActionSetConfigString,
-    
+    "AIHubPatchActionSetProjectConfigInteger": AIHubPatchActionSetProjectConfigInteger,
+    "AIHubPatchActionSetProjectConfigFloat": AIHubPatchActionSetProjectConfigFloat,
+    "AIHubPatchActionSetProjectConfigBoolean": AIHubPatchActionSetProjectConfigBoolean,
+    "AIHubPatchActionSetProjectConfigString": AIHubPatchActionSetProjectConfigString,
+
     "AIHubActionNewImage": AIHubActionNewImage,
     "AIHubActionNewLayer": AIHubActionNewLayer,
 
@@ -55,18 +55,18 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "AIHubExposeSteps": "AIHub Expose Steps",
     "AIHubExposeModel": "AIHub Expose Model",
 
-    "AIHubExposeConfigInteger": "AIHub Expose Config Integer",
-    "AIHubExposeConfigFloat": "AIHub Expose Config Float",
-    "AIHubExposeConfigBoolean": "AIHub Expose Config Boolean",
-    "AIHubExposeConfigString": "AIHub Expose Config String",
+    "AIHubExposeProjectConfigInteger": "AIHub Expose Project Config Integer",
+    "AIHubExposeProjectConfigFloat": "AIHub Expose Project Config Float",
+    "AIHubExposeProjectConfigBoolean": "AIHub Expose Project Config Boolean",
+    "AIHubExposeProjectConfigString": "AIHub Expose Project Config String",
 
     "AIHubActionNewImage": "AIHub Action New Image",
     "AIHubActionNewLayer": "AIHub Action New Layer",
 
-    "AIHubPatchActionSetConfigInteger": "AIHub Patch Action Set Config Integer",
-    "AIHubPatchActionSetConfigFloat": "AIHub Patch Action Set Config Float",
-    "AIHubPatchActionSetConfigBoolean": "AIHub Patch Action Set Config Boolean",
-    "AIHubPatchActionSetConfigString": "AIHub Patch Action Set Config String",
+    "AIHubPatchActionSetProjectConfigInteger": "AIHub Patch Action Set Project Config Integer",
+    "AIHubPatchActionSetProjectConfigFloat": "AIHub Patch Action Set Project Config Float",
+    "AIHubPatchActionSetProjectConfigBoolean": "AIHub Patch Action Set Project Config Boolean",
+    "AIHubPatchActionSetProjectConfigString": "AIHub Patch Action Set Project Config String",
 
     "AIHubUtilsCropMergedImageToLayerSize": "AIHub Utils Crop Merged Image To Layer Size",
     "AIHubUtilsFitLayerToMergedImage": "AIHub Utils Fit Layer To Merged Image",

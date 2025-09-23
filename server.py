@@ -24,7 +24,7 @@ SERVER_RUNNING_FLAG = threading.Event()
 
 AIHUB_COLD = environ.get("AIHUB_COLD", "0") == "1"
 AIHUB_DIR = environ.get("AIHUB_DIR", None)
-AIHUB_PERSIST_TEMPFILES = environ.get("AIHUB_PERSIST_TEMPFILES", False)
+AIHUB_PERSIST_TEMPFILES = environ.get("AIHUB_PERSIST_TEMPFILES", "0") == "1"
 
 WORKFLOWS_CACHE_RAW = None
 WORKFLOWS_CACHE_VALID = None
@@ -230,10 +230,6 @@ class AIHubServer:
                 "default_sampler": model.get("default_sampler", None), # optional, the default sampler to use with this model
                 "default_scheduler": model.get("default_scheduler", None), # optional, the default scheduler to use with this model
             }
-            # check if invalid model if it doesn't have all the required properties
-            if not all(key in cleaned_model for key in ["id", "file", "name", "family", "context", "description", "is_diffusion_model"]):
-                print(f"Invalid model found: {json.dumps(cleaned_model)}")
-                continue
             cleaned_models.append(cleaned_model)
 
         if AIHUB_COLD:
@@ -297,10 +293,6 @@ class AIHubServer:
                 "limit_to_group": lora.get("limit_to_group", None), #optional, limits to which model group this lora can be applied
                 "use_loader_model_only": lora.get("use_loader_model_only", False), # if true, the lora will use the LoaderModelOnly node to load the lora and apply it to the model, so it will not affect the clip embeddings
             }
-            # check if invalid lora if it doesn't have all the required properties
-            if not all(key in cleaned_lora for key in ["id", "file", "name", "context", "description", "limit_to_family"]):
-                print(f"Invalid LORA found: {json.dumps(cleaned_lora)}")
-                continue
             cleaned_loras.append(cleaned_lora)
 
         if AIHUB_COLD:

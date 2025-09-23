@@ -77,10 +77,10 @@ class AIHubExposeInteger:
                 "id": ("STRING", {"default": "exposed_integer", "tooltip": "A unique custom id for this workflow (it should be unique)"}),
                 "label": ("STRING", {"default": "Exposed Integer", "tooltip": "This is the label that will appear in the field"}),
                 "tooltip": ("STRING", {"default": "", "tooltip": "An optional tooltip"}),
-                "min": ("INT", {"default": 0}),
-                "max": ("INT", {"default": 100}),
-                "step": ("INT", {"default": 1}),
-                "value": ("INT", {"default": 10}),
+                "min": ("INT", {"default": 0, "min": -2147483648, "max": 2147483647}),
+                "max": ("INT", {"default": 100, "min": -2147483648, "max": 2147483647}),
+                "step": ("INT", {"default": 1, "min": -2147483648, "max": 2147483647}),
+                "value": ("INT", {"default": 10, "min": -2147483648, "max": 2147483647}),
                 "advanced": ("BOOLEAN", {"default": False, "tooltip": "If set to true, it will make this option be hidden under advanced options for this workflow"}),
                 "index": ("INT", {"default": 0, "tooltip": "this value is used for sorting the input fields when displaying, lower values will appear first"}),
             }
@@ -132,7 +132,7 @@ class AIHubExposeSteps:
             raise ValueError(f"Error: {id} should be less or equal to {150}")
         return (value,)
     
-class AIHubExposeConfigInteger:
+class AIHubExposeProjectConfigInteger:
     """
     A utility node for exposing an integer from the project config.json
     """
@@ -148,7 +148,7 @@ class AIHubExposeConfigInteger:
             "required": {
                 "field": ("STRING", {"default": "my-field", "tooltip": "The field to expose, use dots for entering sublevels"}),
                 "value": ("INT", {"default": 0, "tooltip": "The value of the field"}),
-                "default": ("INT", {"default": 0, "tooltip": "The default value of the field"}),
+                "default": ("INT", {"default": 0, "min": -2147483648, "max": 2147483647, "tooltip": "The default value of the field"}),
             }
         }
 
@@ -171,10 +171,10 @@ class AIHubExposeFloat:
                 "id": ("STRING", {"default": "float", "tooltip": "A unique custom id for this workflow."}),
                 "label": ("STRING", {"default": "Float", "tooltip": "This is the label that will appear in the field."}),
                 "tooltip": ("STRING", {"default": "", "tooltip": "An optional tooltip."}),
-                "min": ("FLOAT", {"default": 0.0}),
-                "max": ("FLOAT", {"default": 1.0}),
+                "min": ("FLOAT", {"default": 0.0, "min": -1.0e+20, "max": 1.0e+20}),
+                "max": ("FLOAT", {"default": 1.0, "min": -1.0e+20, "max": 1.0e+20}),
                 "step": ("FLOAT", {"default": 0.05, "tooltip": "The step value for the float input.", "min": 0.001, "max": 1.0, "step": 0.001}),
-                "value": ("FLOAT", {"default": 0.5}),
+                "value": ("FLOAT", {"default": 0.5, "min": -1.0e+20, "max": 1.0e+20}),
                 "advanced": ("BOOLEAN", {"default": False, "tooltip": "If set to true, it will make this option be hidden under advanced options for this workflow."}),
                 "index": ("INT", {"default": 0, "tooltip": "This value is used for sorting the input fields when displaying; lower values will appear first."}),
                 "slider": ("BOOLEAN", {"default": False, "tooltip": "If set to true, this float will be represented as a slider in the UI."}),
@@ -222,7 +222,7 @@ class AIHubExposeCfg:
             raise ValueError(f"Error: {id} should be less or equal to {100.0}")
         return (value,)
     
-class AIHubExposeConfigFloat:
+class AIHubExposeProjectConfigFloat:
     """
     A utility node for exposing a float from the project config.json
     """
@@ -238,7 +238,7 @@ class AIHubExposeConfigFloat:
             "required": {
                 "field": ("STRING", {"default": "my-field", "tooltip": "The field to expose, use dots for entering sublevels"}),
                 "value": ("FLOAT", {"default": 0.0, "tooltip": "The value of the field"}),
-                "default": ("FLOAT", {"default": 0.0, "tooltip": "The default value of the field"}),
+                "default": ("FLOAT", {"default": 0.0, "min": -1.0e+20, "max": 1.0e+20, "tooltip": "The default value of the field"}),
             }
         }
 
@@ -270,7 +270,7 @@ class AIHubExposeBoolean:
     def get_exposed_boolean(self, id, label, tooltip, description, value, advanced, index):
         return (value,)
     
-class AIHubExposeConfigBoolean:
+class AIHubExposeProjectConfigBoolean:
     """
     A utility node for exposing a boolean from the project config.json
     """
@@ -325,7 +325,7 @@ class AIHubExposeString:
             raise ValueError(f"Error: {label} length should be less or equal to {maxlen}")
         return (value,)
     
-class AIHubExposeConfigString:
+class AIHubExposeProjectConfigString:
     """
     A utility node for exposing a string from the project config.json
     """
@@ -890,7 +890,7 @@ class AIHubActionNewLayer:
     
 # Actions that are considered patches
 # running these actions should create a patch to the project
-class AIHubPatchActionSetConfigInteger:
+class AIHubPatchActionSetProjectConfigInteger:
     """
     A utility node for setting an integer from the project config.json
     """
@@ -909,7 +909,7 @@ class AIHubPatchActionSetConfigInteger:
         return {
             "required": {
                 "field": ("STRING", {"default": "my-field", "tooltip": "The field to set, use dots for entering sublevels"}),
-                "value": ("INT", {"default": 0, "tooltip": "The value of the field to set"}),
+                "value": ("INT", {"default": 0, "min": -2147483648, "max": 2147483647, "tooltip": "The value of the field to set"}),
             },
         }
 
@@ -926,7 +926,7 @@ class AIHubPatchActionSetConfigInteger:
 
         return ()
     
-class AIHubPatchActionSetConfigFloat:
+class AIHubPatchActionSetProjectConfigFloat:
     """
     A utility node for setting an float from the project config.json
     """
@@ -945,7 +945,7 @@ class AIHubPatchActionSetConfigFloat:
         return {
             "required": {
                 "field": ("STRING", {"default": "my-field", "tooltip": "The field to set, use dots for entering sublevels"}),
-                "value": ("FLOAT", {"default": 0.0, "tooltip": "The value of the field to set"}),
+                "value": ("FLOAT", {"default": 0.0, "min": -1.0e+20, "max": 1.0e+20, "tooltip": "The value of the field to set"}),
             }
         }
 
@@ -962,7 +962,7 @@ class AIHubPatchActionSetConfigFloat:
 
         return ()
     
-class AIHubPatchActionSetConfigBoolean:
+class AIHubPatchActionSetProjectConfigBoolean:
     """
     A utility node for setting a boolean from the project config.json
     """
@@ -998,7 +998,7 @@ class AIHubPatchActionSetConfigBoolean:
 
         return ()
     
-class AIHubPatchActionSetConfigString:
+class AIHubPatchActionSetProjectConfigString:
     """
     A utility node for setting a string from the project config.json
     """
