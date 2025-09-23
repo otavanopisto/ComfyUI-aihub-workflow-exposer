@@ -79,9 +79,38 @@ class AIHubServer:
             makedirs(self.models_dir)
 
         originalQueueUpdatedFn = PromptServer.instance.queue_updated
+        originalSendSyncFn = PromptServer.instance.send_sync
         PromptServer.instance.queue_updated = partial(self.queue_updated_override, originalQueueUpdatedFn)
+        PromptServer.instance.send_sync = partial(self.send_sync_override, originalSendSyncFn)
         
         return
+    
+    def send_sync_override(self, originalFn, event, data, sid=None):
+        originalFn(event, data, sid)
+
+        if (event == "progress_state" and self.CURRENTLY_RUNNING is not None):
+            prompt_id_to_check = self.CURRENTLY_RUNNING["id"]
+            if data is not None and data.get("prompt_id", None) == prompt_id_to_check:
+                # this is a dictionary where the key is the node id and the value is the node data
+                # we need to get the data of a node that has a property named state that equals to "running"
+                all_nodes = data.get("nodes", {})
+                for node_id, node_data in all_nodes.items():
+                    if node_data.get("state", "") == "running":
+                        workflow = self.CURRENTLY_RUNNING['workflow']
+                        node_info = workflow.get(node_id, {})
+                        node_name = node_info.get("_meta", {}).get("title", node_info.get("class_type", "Unknown"))
+                        future = asyncio.run_coroutine_threadsafe(
+                                self.CURRENTLY_RUNNING["ws"].send_json({
+                                    'type': 'WORKFLOW_STATUS',
+                                    'id': prompt_id_to_check,
+                                    'workflow_id': self.CURRENTLY_RUNNING['workflow_id'],
+                                    'node_id': node_id,
+                                    'node_name': node_name,
+                                    'progress': node_data.get("value", 0),
+                                    'total': node_data.get("max", 1),
+                                }), self.loop
+                            )
+                        break
     
     def queue_updated_override(self, originalFn):
         # this should still have the self of the PromptServer instance because it is a bound method

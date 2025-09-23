@@ -798,7 +798,7 @@ class AIHubActionNewImage:
     def IS_CHANGED(cls, **kwargs):
         return float("NaN")
     
-    def run_action(self, image, mask, action, name):
+    def run_action(self, image, action, name, mask=None):
         c_image = image[0]
         # we have to convert this image to bytes and apply the mask if the mask is given
         if mask is not None:
@@ -855,7 +855,7 @@ class AIHubActionNewLayer:
             }
         }
 
-    def run_action(self, image, mask, pos_x, pos_y, reference_layer_id, reference_layer_action, name):
+    def run_action(self, image, pos_x, pos_y, reference_layer_id, reference_layer_action, name, mask=None):
         c_image = image[0]
         # we have to convert this image to bytes and apply the mask if the mask is given
         if mask is not None:
@@ -887,40 +887,6 @@ class AIHubActionNewLayer:
         )
 
         return (image, mask)
-    
-class AIHubActionSetProgressStatus:
-    """
-    A utility node for setting the progress status for the progressbar for the client
-    """
-
-    CATEGORY = "aihub/actions"
-    FUNCTION = "run_action"
-
-    RETURN_TYPES = ("*",)
-    RETURN_NAMES = ("any",)
-
-    @classmethod
-    def IS_CHANGED(cls, **kwargs):
-        return float("NaN")
-
-    @classmethod
-    def INPUT_TYPES(s):
-        return {
-            "required": {
-                "any": ("*", {"forceInput": True}),
-                "status": ("STRING", {"default": "", "tooltip": "The status to specify"}),
-            }
-        }
-
-    def run_action(self, value):
-        SERVER.send_json_to_current_client_sync(
-            {
-                "action": "STATUS",
-                "message": value,
-            },
-        )
-
-        return (value, )
     
 # Actions that are considered patches
 # running these actions should create a patch to the project
