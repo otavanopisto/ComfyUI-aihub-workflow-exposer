@@ -140,21 +140,28 @@ class AIHubServer:
                         error_message = ", ".join([data.get('exception_message', "").replace("\n", "") 
                             for v, data in status['messages'] 
                             if v == 'execution_error'])
-                    asyncio.run(self.CURRENTLY_RUNNING["ws"].send_json({
-                        'type': 'WORKFLOW_FINISHED',
-                        'id': prompt_id_to_check,
-                        'workflow_id': self.CURRENTLY_RUNNING['workflow_id'],
-                        'error': True,
-                        'error_message': error_message,
-                    }))
+                    try:
+                        asyncio.run(self.CURRENTLY_RUNNING["ws"].send_json({
+                            'type': 'WORKFLOW_FINISHED',
+                            'id': prompt_id_to_check,
+                            'workflow_id': self.CURRENTLY_RUNNING['workflow_id'],
+                            'error': True,
+                            'error_message': error_message,
+                        }))
+                    except Exception as e:
+                        print(f"Error sending workflow finished message, maybe user closed connection? {e}")
                     self.CURRENTLY_RUNNING = None
+                    
                 else:
-                    asyncio.run(self.CURRENTLY_RUNNING["ws"].send_json({
-                        'type': 'WORKFLOW_FINISHED',
-                        'id': prompt_id_to_check,
-                        'workflow_id': self.CURRENTLY_RUNNING['workflow_id'],
-                        'error': False,
-                    }))
+                    try:
+                        asyncio.run(self.CURRENTLY_RUNNING["ws"].send_json({
+                            'type': 'WORKFLOW_FINISHED',
+                            'id': prompt_id_to_check,
+                            'workflow_id': self.CURRENTLY_RUNNING['workflow_id'],
+                            'error': False,
+                        }))
+                    except Exception as e:
+                        print(f"Error sending workflow finished message, maybe user closed connection? {e}")
                     self.CURRENTLY_RUNNING = None
         
         if (task_completed):
