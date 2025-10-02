@@ -26,6 +26,7 @@ NODE_CLASS_MAPPINGS = {
     "AIHubExposeProjectImage": AIHubExposeProjectImage,
     "AIHubExposeProjectText": AIHubExposeProjectText,
     "AIHubExposeProjectImageBatch": AIHubExposeProjectImageBatch,
+    "AIHubExposeProjectLatent": AIHubExposeProjectLatent,
 
     "AIHubExposeProjectConfigInteger": AIHubExposeProjectConfigInteger,
     "AIHubExposeProjectConfigFloat": AIHubExposeProjectConfigFloat,
@@ -84,6 +85,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "AIHubExposeProjectImage": "AIHub Expose Project Image",
     "AIHubExposeProjectText": "AIHub Expose Project Text",
     "AIHubExposeProjectImageBatch": "AIHub Expose Project Image Batch",
+    "AIHubExposeProjectLatent": "AIHub Expose Project Latent",
 
     "AIHubExposeProjectConfigInteger": "AIHub Expose Project Config Integer",
     "AIHubExposeProjectConfigFloat": "AIHub Expose Project Config Float",

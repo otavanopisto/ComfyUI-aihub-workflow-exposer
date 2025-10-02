@@ -166,12 +166,14 @@ class AIHubExposeProjectConfigInteger:
         return {
             "required": {
                 "field": ("STRING", {"default": "my-field", "tooltip": "The field to expose, use dots for entering sublevels"}),
-                "value": ("INT", {"default": 0, "tooltip": "The value of the field"}),
                 "default": ("INT", {"default": 0, "min": -2147483648, "max": 2147483647, "tooltip": "The default value of the field"}),
+            },
+            "hidden": {
+                "value": ("INT", {"default": 0, "tooltip": "The value of the field"}),
             }
         }
 
-    def get_exposed_int(self, field, value, default):
+    def get_exposed_int(self, field, default, value=None):
         return (value if value is not None else default,)
     
 class AIHubExposeFloat:
@@ -256,12 +258,14 @@ class AIHubExposeProjectConfigFloat:
         return {
             "required": {
                 "field": ("STRING", {"default": "my-field", "tooltip": "The field to expose, use dots for entering sublevels"}),
-                "value": ("FLOAT", {"default": 0.0, "tooltip": "The value of the field"}),
                 "default": ("FLOAT", {"default": 0.0, "min": -1.0e+20, "max": 1.0e+20, "tooltip": "The default value of the field"}),
+            },
+            "hidden": {
+                "value": ("FLOAT", {"default": 0.0, "tooltip": "The value of the field"}),
             }
         }
 
-    def get_exposed_float(self, field, value, default):
+    def get_exposed_float(self, field, default, value=None):
         return (value if value is not None else default,)
     
 class AIHubExposeBoolean:
@@ -304,12 +308,14 @@ class AIHubExposeProjectConfigBoolean:
         return {
             "required": {
                 "field": ("STRING", {"default": "my-field", "tooltip": "The field to expose, use dots for entering sublevels"}),
-                "value": ("BOOLEAN", {"default": True, "tooltip": "The value of the field"}),
                 "default": ("BOOLEAN", {"default": True, "tooltip": "The default value of the field"}),
+            },
+            "hidden": {
+                "value": ("BOOLEAN", {"default": True, "tooltip": "The value of the field"}),
             }
         }
 
-    def get_exposed_boolean(self, field, value, default):
+    def get_exposed_boolean(self, field, default, value=None):
         return (value if value is not None else default,)
     
 class AIHubExposeString:
@@ -359,12 +365,14 @@ class AIHubExposeProjectConfigString:
         return {
             "required": {
                 "field": ("STRING", {"default": "my-field", "tooltip": "The field to expose, use dots for entering sublevels"}),
-                "value": ("STRING", {"default": "my-value", "tooltip": "The value of the field"}),
                 "default": ("STRING", {"default": "", "tooltip": "The default value of the field"}),
+            },
+            "hidden": {
+                "value": ("STRING", {"default": "my-value", "tooltip": "The value of the field"}),
             }
         }
 
-    def get_exposed_string(self, field, value, default):
+    def get_exposed_string(self, field, default, value=None):
         return (value if value is not None else default,)
 
 class AIHubExposeStringSelection:
@@ -1112,7 +1120,7 @@ class AIHubExposeProjectLatent:
         return {
             "required": {
                 "id": ("STRING", {"default": "exposed_latent", "tooltip": "A unique custom id for this workflow."}),
-                "file_name": ("STRING", {"default": "latent.npy", "tooltip": "The name of the latent file as stored in the project files, including extension"}),
+                "file_name": ("STRING", {"default": "latent.safetensors", "tooltip": "The name of the latent file as stored in the project files, including extension"}),
             },
             "hidden": {
                 "local_file": ("STRING", {"default": "", "tooltip": "A local file to load the latent from, if given this will be used instead of loading from file"}),
@@ -1380,7 +1388,7 @@ class AIHubActionSetProjectConfigInteger:
     def run_action(self, field, value):
         SERVER.send_json_to_current_client_sync(
             {
-                "action": "SET_CONFIG_VALUE",
+                "type": "SET_CONFIG_VALUE",
                 "field": field,
                 "value": value,
             }
@@ -1415,7 +1423,7 @@ class AIHubActionSetProjectConfigFloat:
     def run_action(self, field, value):
         SERVER.send_json_to_current_client_sync(
             {
-                "action": "SET_CONFIG_VALUE",
+                "type": "SET_CONFIG_VALUE",
                 "field": field,
                 "value": value,
             }
@@ -1449,7 +1457,7 @@ class AIHubActionSetProjectConfigBoolean:
     def run_action(self, field, value):
         SERVER.send_json_to_current_client_sync(
             {
-                "action": "SET_CONFIG_VALUE",
+                "type": "SET_CONFIG_VALUE",
                 "field": field,
                 "value": value,
             }
@@ -1484,7 +1492,7 @@ class AIHubActionSetProjectConfigString:
     def run_action(self, field, value):
         SERVER.send_json_to_current_client_sync(
             {
-                "action": "SET_CONFIG_VALUE",
+                "type": "SET_CONFIG_VALUE",
                 "field": field,
                 "value": value,
             }

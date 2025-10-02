@@ -678,37 +678,45 @@ class AIHubServer:
                             continue
 
                         elif 'cancel' in data and data["type"] == "WORKFLOW_OPERATION":
+                            cancelled_current = False
                             what_to_cancel = data['cancel']
-                            if what_to_cancel == "all":
-                                if (self.CURRENTLY_RUNNING is not None and self.CURRENTLY_RUNNING["ws"] == ws):
+                            if type(what_to_cancel) is str:
+                                if (self.CURRENTLY_RUNNING is not None and self.CURRENTLY_RUNNING["ws"] == ws and self.CURRENTLY_RUNNING["id"] == what_to_cancel):
+                                    await self.CURRENTLY_RUNNING["ws"].send_json({
+                                        'type': 'WORKFLOW_FINISHED',
+                                        'id': self.CURRENTLY_RUNNING["id"],
+                                        'workflow_id': self.CURRENTLY_RUNNING["workflow_id"],
+                                        'error': True,
+                                        "error_message": "Workflow run cancelled by user",
+                                        "cancelled": True
+                                    })
                                     self.cancel_current_run()
+                                    cancelled_current = True
+                                else:
+                                    with self.QUEUE_LOCK:
+                                        for i in range(0, len(self.WORKFLOW_REQUEST_QUEUE)):
+                                            if self.WORKFLOW_REQUEST_QUEUE[i]["id"] == what_to_cancel and self.WORKFLOW_REQUEST_QUEUE[i]["ws"] == ws:
+                                                await self.WORKFLOW_REQUEST_QUEUE[i]["ws"].send_json({
+                                                    'type': 'WORKFLOW_FINISHED',
+                                                    'id': self.WORKFLOW_REQUEST_QUEUE[i]["id"],
+                                                    'workflow_id': self.WORKFLOW_REQUEST_QUEUE[i]["workflow_id"],
+                                                    'error': True,
+                                                    "error_message": "Workflow run cancelled by user",
+                                                    "cancelled": True
+                                                })
+                                                del self.WORKFLOW_REQUEST_QUEUE[i]
+                                                break
+                                
+                                        for i in range(0, len(self.WORKFLOW_REQUEST_QUEUE)):
+                                            await self.WORKFLOW_REQUEST_QUEUE[i]["ws"].send_json({
+                                                'type': 'WORKFLOW_AWAIT',
+                                                'id': self.WORKFLOW_REQUEST_QUEUE[i]["id"],
+                                                'workflow_id': self.WORKFLOW_REQUEST_QUEUE[i]["workflow_id"],
+                                                'before_this': i
+                                            })
 
-                                with self.QUEUE_LOCK:
-                                    for i in range(0, len(self.WORKFLOW_REQUEST_QUEUE)):
-                                        if self.WORKFLOW_REQUEST_QUEUE[i]["ws"] == ws:
-                                            del self.WORKFLOW_REQUEST_QUEUE[i]
-
-                                    for i in range(0, len(self.WORKFLOW_REQUEST_QUEUE)):
-                                        self.WORKFLOW_REQUEST_QUEUE[i]["ws"].send_json({
-                                            'type': 'WORKFLOW_AWAIT',
-                                            'id': self.WORKFLOW_REQUEST_QUEUE[i]["id"],
-                                            'workflow_id': self.WORKFLOW_REQUEST_QUEUE[i]["workflow_id"],
-                                            'before_this': i
-                                        })
-                            elif type(what_to_cancel) is str:
-                                with self.QUEUE_LOCK:
-                                    for i in range(0, len(self.WORKFLOW_REQUEST_QUEUE)):
-                                        if self.WORKFLOW_REQUEST_QUEUE[i]["id"] == what_to_cancel and self.WORKFLOW_REQUEST_QUEUE[i]["ws"] == ws:
-                                            del self.WORKFLOW_REQUEST_QUEUE[i]
-                                            break
-                            
-                                    for i in range(0, len(self.WORKFLOW_REQUEST_QUEUE)):
-                                        await self.WORKFLOW_REQUEST_QUEUE[i]["ws"].send_json({
-                                            'type': 'WORKFLOW_AWAIT',
-                                            'id': self.WORKFLOW_REQUEST_QUEUE[i]["id"],
-                                            'workflow_id': self.WORKFLOW_REQUEST_QUEUE[i]["workflow_id"],
-                                            'before_this': i
-                                        })
+                            if cancelled_current:
+                                asyncio.create_task(self.process_next_workflow_in_queue())
 
                         elif 'workflow_id' not in data and data["type"] == "WORKFLOW_OPERATION":
                             await ws.send_json({'type': 'ERROR', 'message': 'Missing workflow_id to execute'})
@@ -797,6 +805,7 @@ class AIHubServer:
 
                 if self.CURRENTLY_RUNNING and self.CURRENTLY_RUNNING["ws"] == ws:
                     self.cancel_current_run()
+                    asyncio.create_task(self.process_next_workflow_in_queue())
 
             if not AIHUB_PERSIST_TEMPFILES:
                 # clean up the temporary directory for this websocket connection
@@ -881,6 +890,7 @@ class AIHubServer:
 
     def cancel_current_run(self):
         interrupt_processing()
+        self.CURRENTLY_RUNNING = None
 
     async def process_current(self):
         self.awaiting_tasks_lock.acquire()
@@ -988,31 +998,20 @@ class AIHubServer:
         future.add_done_callback(on_done)
 
     def send_json_to_current_client_sync(self, data):
-        max_retries = 5
-        last_exc = None
-        for attempt in range(max_retries):
-            try:
-                loop = asyncio.get_running_loop()
-            except RuntimeError:
-                loop = None
+        future = asyncio.run_coroutine_threadsafe(
+            self.send_json_to_current_client(data),
+            self.loop
+        )
+        self.awaiting_tasks_lock.acquire()
+        self.awaiting_tasks_amount += 1
+        self.awaiting_tasks_lock.release()
 
-            if loop and loop.is_running():
-                # In event loop thread: must submit to loop from another thread
-                try:
-                    fut = asyncio.run_coroutine_threadsafe(
-                        self.send_json_to_current_client(data),
-                        loop
-                    )
-                    return fut.result()
-                except Exception as exc:
-                    last_exc = exc
-                    time.sleep(0.05)
-                    continue
-            else:
-                # Not in event loop: safe to block
-                try:
-                    return asyncio.run(self.send_json_to_current_client(data))
-                except Exception as exc:
-                    last_exc = exc
-                    time.sleep(0.05)
-                    continue
+        def on_done(t):
+            self.awaiting_tasks_lock.acquire()
+            self.awaiting_tasks_amount -= 1
+            self.awaiting_tasks_lock.release()
+
+            if self.awaiting_tasks_amount == 0:
+                self.awaiting_tasks_done_flag.set()
+
+        future.add_done_callback(on_done)
