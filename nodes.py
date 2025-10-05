@@ -531,8 +531,11 @@ class AIHubExposeImage:
                 "tooltip": ("STRING", {"default": "", "tooltip": "An optional tooltip"}),
                 "type": ([
                     "current_layer",
+                    "current_layer_at_image_intersection",
                     "merged_image",
                     "merged_image_without_current_layer",
+                    "merged_image_current_layer_intersection",
+                    "merged_image_current_layer_intersection_without_current_layer",
                     "upload",
                 ], {"default": "upload", "tooltip": "The source of the image"}),
                 "index": ("INT", {"default": 0, "tooltip": "This value is used for sorting the input fields when displaying; lower values will appear first."}),
