@@ -1,6 +1,8 @@
 import io
 import os
+from .aihub_env import AIHUB_LORAS_DIR, AIHUB_MODELS_DIR, AIHUB_WORKFLOWS_DIR
 from nodes import LoadImage, CheckpointLoaderSimple, LoraLoader, UNETLoader, LoraLoaderModelOnly, VAELoader, CLIPLoader, DualCLIPLoader
+from folder_paths import get_filename_list
 import json
 import torch
 import torchaudio
@@ -43,6 +45,29 @@ LAST_CLIP_FILE = None
 LAST_CLIP = None
 LAST_CLIP_DUAL = False
 LAST_CLIP_TYPE = None
+
+CLIP_TYPES = [
+    "stable_diffusion",
+    "stable_cascade",
+    "sd3",
+    "stable_audio",
+    "mochi",
+    "ltxv",
+    "pixart",
+    "cosmos",
+    "lumina2",
+    "wan",
+    "hidream",
+    "chroma",
+    "ace",
+    "omnigen2",
+    "qwen_image",
+    "sdxl",
+    "flux",
+    "hunyuan_video"
+]
+
+WEIGHT_DTYPES = ["default", "fp8_e4m3fn", "fp8_e4m3fn_fast", "fp8_e5m2"]
 
 class AIHubWorkflowController:
     """
@@ -802,7 +827,7 @@ class AIHubExposeModel:
                 "loras_strengths": ("STRING", {"default": "", "tooltip": "The default, comma separated list of lora strengths to apply to this model, it must match the number of loras given"}),
                 "loras_use_loader_model_only": ("STRING", {"default": "", "tooltip": "The default, comma separated list of booleans for the loras, 't' or 'f' to apply only to the model and not the clip, it must match the number of loras given"}),
                 "is_diffusion_model": ("BOOLEAN", {"default": True, "tooltip": "If set to true, it will load the model from the diffusion_models folder, if false it will load it from the checkpoints folder"}),
-                "diffusion_model_weight_dtype": (["default", "fp8_e4m3fn", "fp8_e4m3fn_fast", "fp8_e5m2"], {"default": "default", "tooltip": "The weight dtype to use when loading the diffusion model, this is only used if is_diffusion_model is true"}),
+                "diffusion_model_weight_dtype": (WEIGHT_DTYPES, {"default": "default", "tooltip": "The weight dtype to use when loading the diffusion model, this is only used if is_diffusion_model is true"}),
                 "limit_to_family": ("STRING", {"default": "", "tooltip": "The family of the model to be loaded is limited by this value"}),
                 "limit_to_group": ("STRING", {"default": "", "tooltip": "The group of the model to be loaded is limited by this value"}),
                 "tooltip": ("STRING", {"default": "", "tooltip": "An optional tooltip"}),
@@ -2127,26 +2152,7 @@ class AIHubUtilsLoadCLIP:
             "required": {
                 "clip_1": ("STRING", {"default": "", "tooltip": "The CLIP to load"}),
                 "clip_2": ("STRING", {"default": "", "tooltip": "The Second CLIP to load, if given, a Dual CLIP will be created"}),
-                "type": ([
-                    "stable_diffusion",
-                    "stable_cascade",
-                    "sd3",
-                    "stable_audio",
-                    "mochi",
-                    "ltxv",
-                    "pixart",
-                    "cosmos",
-                    "lumina2",
-                    "wan",
-                    "hidream",
-                    "chroma",
-                    "ace",
-                    "omnigen2",
-                    "qwen_image",
-                    "sdxl",
-                    "flux",
-                    "hunyuan_video"
-                ], {"default": "stable_diffusion", "tooltip": "The type of the CLIP to load"}),
+                "type": (CLIP_TYPES, {"default": "stable_diffusion", "tooltip": "The type of the CLIP to load"}),
                 "device": (["default", "cpu"], {"default": "default", "tooltip": "The device to load the CLIP on"}),
             },
         }
@@ -2229,3 +2235,293 @@ class AIHubUtilsLoadLora:
                 model, clip = lora_loader.load_lora(model, clip, lora, strength, strength)
 
         return (model, clip,)
+    
+# === META NODES ===
+
+def get_filename_list_for_aihub_folder(folder):
+    result = []
+    for file in os.listdir(folder):
+        if os.path.isfile(os.path.join(folder, file)):
+            result.append(os.path.splitext(file)[0])
+    return result
+
+class AIHubMetaSetExportedModelImage:
+    """
+    Meta node utility to set the image of an exported model
+    """
+    CATEGORY = "aihub/meta"
+    FUNCTION = "set_exported_model_image"
+
+    RETURN_TYPES = ()
+    RETURN_NAMES = ()
+
+    OUTPUT_NODE = True
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "model": (get_filename_list_for_aihub_folder(AIHUB_MODELS_DIR), {"default": "", "tooltip": "The id of the model to set the image for"}),
+                "image": ("IMAGE", {"tooltip": "The image to set for the model"}),
+            }
+        }
+    
+    def set_exported_model_image(self, model, image):
+        if image is None or len(image) == 0:
+            raise ValueError("Error: No image specified")
+
+        image_filename = model + ".png"
+
+        if image is not None:
+            # save the image to the models folder with the name of the model id
+            c_image = image[0]
+            i = 255. * c_image.cpu().numpy()
+            img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
+            img.save(os.path.join(AIHUB_MODELS_DIR, image_filename), format='PNG')
+
+        return ()
+    
+class AIHubMetaExportModel:
+    """
+    Meta node utility to export a model to its json file so it can be used by
+    the client side UI
+    """
+    CATEGORY = "aihub/meta"
+    FUNCTION = "export_model"
+
+    RETURN_TYPES = ()
+    RETURN_NAMES = ()
+
+    OUTPUT_NODE = True
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "model": (get_filename_list("checkpoints") + get_filename_list("diffusion_models"), {"tooltip": "The model to export"}),
+                "weight_dtype": (WEIGHT_DTYPES, {"default": "default", "tooltip": "The weight dtype to use when loading the diffusion model, this is only useful if the model is a diffusion model"}),
+                "context": (["image", "video", "audio", "3d", "text"], {"default": "image", "tooltip": "The context to use for the model", "multiline": True}),
+                "name": ("STRING", {"default": "", "tooltip": "The name to use for the model in a human readable format, if not given the model filename will be used"}),
+                "description": ("STRING", {"default": "", "tooltip": "The description to use for the model, this is shown in the UI", "multiline": True}),
+                "family": ("STRING", {"default": "sdxl", "tooltip": "The family to use for the model, this is used for groupping models in the UI"}),
+                "group": ("STRING", {"default": "my_checkpoint_name", "tooltip": "The group to use for the model, this is used for groupping models in the UI"}),
+                "vae": ([""] + get_filename_list("vae"), {"default": "", "tooltip": "The VAE to use for the model, if not given the VAE from the checkpoint will be used"}),
+                "clip_1": ([""] + get_filename_list("text_encoders"), {"default": "", "tooltip": "The CLIP to use for the model, if not given the CLIP from the checkpoint will be used"}),
+                "clip_2": ([""] + get_filename_list("text_encoders"), {"default": "", "tooltip": "The second CLIP to use for the model, if not given a single CLIP will be used"}),
+                "clip_type": (CLIP_TYPES, {"default": "stable_diffusion", "tooltip": "The type of the CLIP to use"}),
+                "default_cfg": ("FLOAT", {"default": 7.0, "min": 0.0, "max": 100.0, "tooltip": "The default CFG scale to use for the model"}),
+                "default_steps": ("INT", {"default": 20, "min": 1, "max": 100, "tooltip": "The default number of steps to use for the model"}),
+                "default_scheduler": (comfy.samplers.KSampler.SCHEDULERS, {"default": "karras", "tooltip": "The default scheduler to use for the model"}),
+                "default_sampler": (comfy.samplers.KSampler.SAMPLERS, {"default": "dpmpp_sde", "tooltip": "The default sampler to use for the model"})
+            },
+            "optional": {
+                "optional_image": ("IMAGE", {"default": "", "tooltip": "An optional image to use for the model"})
+            }
+        }
+    
+    def export_model(self, model, weight_dtype, context, name, description, family, group, vae, clip_1, clip_2, clip_type, default_cfg, default_steps, default_scheduler, default_sampler, optional_image=None):
+        if not model or model.strip() == "":
+            raise ValueError("Error: No model specified")
+        if not family or family.strip() == "":
+            raise ValueError("Error: No family specified")
+        
+        id = os.path.splitext(os.path.basename(model))[0]
+        if not name or name.strip() == "":
+            name = id
+
+        is_diffusion_model = model in get_filename_list("diffusion_models")
+        
+        model_JSON = {
+            "id": id,
+            "name": name,
+            "file": model,
+            "family": family,
+            "description": description,
+            "context": context,
+            "is_diffusion_model": is_diffusion_model,
+            "default_cfg": default_cfg,
+            "default_steps": default_steps,
+            "default_scheduler": default_scheduler,
+            "default_sampler": default_sampler
+        }
+
+        if is_diffusion_model:
+            model_JSON["diffusion_model_weight_dtype"] = weight_dtype
+
+        if group and group.strip() != "":
+            model_JSON["group"] = group
+
+        if vae and vae.strip() != "":
+            model_JSON["vae_file"] = vae
+
+        if clip_1 and clip_1.strip() != "" and (not clip_2 or clip_2.strip() == ""):
+            model_JSON["clip_file"] = clip_1
+            model_JSON["clip_type"] = clip_type
+        elif clip_2 and clip_2.strip() != "" and (not clip_1 or clip_1.strip() == ""):
+            model_JSON["clip_file"] = clip_2
+            model_JSON["clip_type"] = clip_type
+        elif clip_2 and clip_2.strip() != "" and clip_1 and clip_1.strip() != "":
+            model_JSON["clip_file"] = clip_1 + "," + clip_2
+            model_JSON["clip_type"] = clip_type
+
+        image_filename = id + ".png"
+
+        if optional_image is not None:
+            # save the image to the models folder with the name of the model id
+            c_image = optional_image[0]
+            i = 255. * c_image.cpu().numpy()
+            img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
+            img.save(os.path.join(AIHUB_MODELS_DIR, image_filename), format='PNG')
+
+        json_filename = id + ".json"
+        with open(os.path.join(AIHUB_MODELS_DIR, json_filename), "w", encoding="utf-8") as f:
+            json.dump(model_JSON, f, indent=4)
+
+        return ()
+    
+class AIHubMetaExportLora:
+    """
+    Meta node utility to export a lora to its json file so it can be used by
+    the client side UI
+    """
+    CATEGORY = "aihub/meta"
+    FUNCTION = "export_lora"
+
+    RETURN_TYPES = ()
+    RETURN_NAMES = ()
+
+    OUTPUT_NODE = True
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "lora": (get_filename_list("loras"), {"default": "", "tooltip": "The lora to export"}),
+                "name": ("STRING", {"default": "", "tooltip": "The name to use for the lora in a human readable format, if not given the lora filename will be used"}),
+                "description": ("STRING", {"default": "", "tooltip": "The description to use for the lora, this is shown in the UI", "multiline": True}),
+                "context": (["image", "video", "audio", "3d", "text"], {"default": "image", "tooltip": "The context to use for the lora"}),
+                "limit_to_family": ("STRING", {"default": "sdxl", "tooltip": "The lora can only apply to models tagged with this family"}),
+                "limit_to_group": ("STRING", {"default": "", "tooltip": "The lora can only apply to models tagged with this group"}),
+                "limit_to_model": ([""] + get_filename_list("checkpoints") + get_filename_list("diffusion_models"), {"default": "", "tooltip": "The lora can only apply to this specific model"}),
+                "default_strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 10.0, "tooltip": "The default strength to use for the lora"}),
+                "use_loader_model_only": ("BOOLEAN", {"default": False, "tooltip": "If set to true, it will only apply the lora to the model and not to the clip"}),
+            },
+            "optional": {
+                "optional_image": ("IMAGE", {"default": "", "tooltip": "An optional image to use for the lora"})
+            }
+        }
+    
+    def export_lora(self, lora, name, description, context, limit_to_family, limit_to_group, limit_to_model, default_strength, use_loader_model_only, optional_image=None):
+        if not lora or lora.strip() == "":
+            raise ValueError("Error: No lora specified")
+        
+        id = os.path.splitext(os.path.basename(lora))[0]
+        if not name or name.strip() == "":
+            name = id
+
+        lora_JSON = {
+            "id": id,
+            "file": lora,
+            "context": context,
+            "description": description,
+            "default_strength": default_strength,
+            "use_loader_model_only": use_loader_model_only
+        }
+
+        if limit_to_family and limit_to_family.strip() != "":
+            lora_JSON["limit_to_family"] = limit_to_family
+        
+        if limit_to_group and limit_to_group.strip() != "":
+            if not limit_to_family or limit_to_family.strip() == "":
+                raise ValueError("Error: limit_to_family must be set if limit_to_group is set")
+            lora_JSON["limit_to_group"] = limit_to_group
+
+        if limit_to_model and limit_to_model.strip() != "":
+            model_id = os.path.splitext(os.path.basename(limit_to_model))[0]
+            lora_JSON["limit_to_model"] = model_id
+
+        image_filename = id + ".png"
+        if optional_image is not None:
+            # save the image to the models folder with the name of the model id
+            c_image = optional_image[0]
+            i = 255. * c_image.cpu().numpy()
+            img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
+            img.save(os.path.join(AIHUB_LORAS_DIR, image_filename), format='PNG')
+
+        json_filename = id + ".json"
+        with open(os.path.join(AIHUB_LORAS_DIR, json_filename), "w", encoding="utf-8") as f:
+            json.dump(lora_JSON, f, indent=4)
+
+        return ()
+    
+class AIHubMetaSetExportedLoraImage:
+    """
+    Meta node utility to set the image of an exported lora
+    """
+    CATEGORY = "aihub/meta"
+    FUNCTION = "set_exported_lora_image"
+
+    RETURN_TYPES = ()
+    RETURN_NAMES = ()
+
+    OUTPUT_NODE = True
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "lora": (get_filename_list_for_aihub_folder(AIHUB_LORAS_DIR), {"default": "", "tooltip": "The id of the lora to set the image for"}),
+                "image": ("IMAGE", {"tooltip": "The image to set for the lora"}),
+            }
+        }
+
+    def set_exported_lora_image(self, lora, image):
+        if image is None or len(image) == 0:
+            raise ValueError("Error: No image specified")
+
+        image_filename = lora + ".png"
+
+        if image is not None:
+            # save the image to the lora folder with the name of the lora id
+            c_image = image[0]
+            i = 255. * c_image.cpu().numpy()
+            img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
+            img.save(os.path.join(AIHUB_LORAS_DIR, image_filename), format='PNG')
+
+        return ()
+    
+class AIHubMetaSetExportedWorkflowImage:
+    """
+    Meta node utility to set the image of an exported workflow
+    """
+    CATEGORY = "aihub/meta"
+    FUNCTION = "set_exported_workflow_image"
+
+    RETURN_TYPES = ()
+    RETURN_NAMES = ()
+
+    OUTPUT_NODE = True
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "workflow": (get_filename_list_for_aihub_folder(AIHUB_WORKFLOWS_DIR), {"default": "", "tooltip": "The id of the workflow to set the image for"}),
+                "image": ("IMAGE", {"tooltip": "The image to set for the workflow"}),
+            }
+        }
+
+    def set_exported_workflow_image(self, workflow, image):
+        if image is None or len(image) == 0:
+            raise ValueError("Error: No image specified")
+
+        image_filename = workflow + ".png"
+
+        if image is not None:
+            # save the image to the workflows folder with the name of the workflow id
+            c_image = image[0]
+            i = 255. * c_image.cpu().numpy()
+            img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
+            img.save(os.path.join(AIHUB_WORKFLOWS_DIR, image_filename), format='PNG')
+
+        return ()

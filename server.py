@@ -18,12 +18,13 @@ from aiohttp import web
 from server import PromptServer
 from execution import validate_prompt
 
+from .aihub_env import AIHUB_DIR, AIHUB_MODELS_DIR, AIHUB_LORAS_DIR, AIHUB_WORKFLOWS_DIR
+
 WEB_SOCKET_SERVER_PORT = 8000
 SERVER_THREAD = None
 SERVER_RUNNING_FLAG = threading.Event()
 
 AIHUB_COLD = environ.get("AIHUB_COLD", "0") == "1"
-AIHUB_DIR = environ.get("AIHUB_DIR", None)
 AIHUB_PERSIST_TEMPFILES = environ.get("AIHUB_PERSIST_TEMPFILES", "0") == "1"
 
 WORKFLOWS_CACHE_RAW = None
@@ -39,6 +40,50 @@ MODELS_CACHE_CLEANED = None
 AIHUB_TEMP_DIRECTORY_ENV = environ.get("AIHUB_TEMP_DIR", None)
 AIHUB_TEMP_DIRECTORY = AIHUB_TEMP_DIRECTORY_ENV if AIHUB_TEMP_DIRECTORY_ENV is not None else tempfile.gettempdir()
 
+@PromptServer.instance.routes.post("/aihub_workflows")
+async def handle_workflow_add(request):
+    # get the json data from the request
+    try:
+        data = await request.json()
+    except Exception as e:
+        return web.json_response({"error": "Invalid JSON data"}, status=400)
+    
+    workflow_id = None
+
+    try:
+        for node in data.values():
+            if node.get("class_type", None) == "AIHubWorkflowController":
+                workflow_id = node.get("inputs", {}).get("id", None)
+                break
+    except Exception as e:
+        return web.json_response({"error": "Invalid workflow data"}, status=400)
+    
+    # save the json data to the aihub directory
+    with open(path.join(AIHUB_WORKFLOWS_DIR, f"{workflow_id}.json"), "w") as f:
+        json.dump(data, f)
+
+    return web.json_response({"status": "ok"})
+
+@PromptServer.instance.routes.post("/aihub_workflows/{workflow_id}/image")
+async def handle_workflow_image_add(request):
+    # for this we just need to get the binary data from the request
+    # get the json data from the request
+    try:
+        data = await request.read()
+    except Exception as e:
+        return web.json_response({"error": "Invalid image data"}, status=400)
+    
+    workflow_id = request.match_info.get("workflow_id", None)
+
+    if workflow_id is None or workflow_id.strip() == "" or ".." in workflow_id or "/" in workflow_id or "\\" in workflow_id:
+        return web.json_response({"error": "Invalid workflow id"}, status=400)
+
+    # save the image data to the aihub directory
+    with open(path.join(AIHUB_WORKFLOWS_DIR, f"{workflow_id}.png"), "wb") as f:
+        f.write(data)
+
+    return web.json_response({"status": "ok"})
+
 class AIHubServer:
     """
     the server class handles the websocket server and the workflow queue
@@ -50,11 +95,6 @@ class AIHubServer:
 
     LAST_PING_QUEUE_VALUE = None
 
-    aihub_dir = AIHUB_DIR if AIHUB_DIR is not None else path.join(path.dirname(path.abspath(__file__)), "..", "..", "aihub")
-    workflows_dir = path.join(aihub_dir, "workflows")
-    loras_dir = path.join(aihub_dir, "loras")
-    models_dir = path.join(aihub_dir, "models")
-
     awaiting_tasks_amount = 0
     awaiting_tasks_done_flag = None
     awaiting_tasks_lock = threading.Lock()
@@ -63,20 +103,20 @@ class AIHubServer:
 
     def __init__(self):
         # create folder ../../aihub if it doesnt't exist
-        if not path.exists(self.aihub_dir):
-            makedirs(self.aihub_dir)
-        
+        if not path.exists(AIHUB_DIR):
+            makedirs(AIHUB_DIR)
+
         # create folder ../../aihub/workflows if it doesn't exist
-        if not path.exists(self.workflows_dir):
-            makedirs(self.workflows_dir)
+        if not path.exists(AIHUB_WORKFLOWS_DIR):
+            makedirs(AIHUB_WORKFLOWS_DIR)
 
         # create folder ../../aihub/loras if it doesn't exist
-        if not path.exists(self.loras_dir):
-            makedirs(self.loras_dir)
+        if not path.exists(AIHUB_LORAS_DIR):
+            makedirs(AIHUB_LORAS_DIR)
 
         # create folder ../../aihub/models if it doesn't exist
-        if not path.exists(self.models_dir):
-            makedirs(self.models_dir)
+        if not path.exists(AIHUB_MODELS_DIR):
+            makedirs(AIHUB_MODELS_DIR)
 
         originalQueueUpdatedFn = PromptServer.instance.queue_updated
         originalSendSyncFn = PromptServer.instance.send_sync
@@ -185,16 +225,16 @@ class AIHubServer:
             return MODELS_CACHE_RAW
         
         # first let's read the files in the ComfyUI models directory
-        print(f"Loading models from directory: {self.models_dir}")
+        print(f"Loading models from directory: {AIHUB_MODELS_DIR}")
 
         # if the directory does not exist, return empty list
-        if path.exists(self.models_dir):
+        if path.exists(AIHUB_MODELS_DIR):
             # otherwise, read the files
-            files = listdir(self.models_dir)
+            files = listdir(AIHUB_MODELS_DIR)
             models = []
             for file in files:
                 if file.endswith(".json"):
-                    with open(path.join(self.models_dir, file), "r", encoding="utf-8") as f:
+                    with open(path.join(AIHUB_MODELS_DIR, file), "r", encoding="utf-8") as f:
                         try:
                             model_data = json.load(f)
                             models.append(model_data)
@@ -253,16 +293,16 @@ class AIHubServer:
             return LORAS_CACHE_RAW
         
         # first let's read the files in the ComfyUI loras directory
-        print(f"Loading loras from directory: {self.loras_dir}")
+        print(f"Loading loras from directory: {AIHUB_LORAS_DIR}")
 
         # if the directory does not exist, return empty list
-        if path.exists(self.loras_dir):
+        if path.exists(AIHUB_LORAS_DIR):
             # otherwise, read the files
-            files = listdir(self.loras_dir)
+            files = listdir(AIHUB_LORAS_DIR)
             loras = []
             for file in files:
                 if file.endswith(".json"):
-                    with open(path.join(self.loras_dir, file), "r", encoding="utf-8") as f:
+                    with open(path.join(AIHUB_LORAS_DIR, file), "r", encoding="utf-8") as f:
                         try:
                             lora_data = json.load(f)
                             loras.append(lora_data)
@@ -319,16 +359,16 @@ class AIHubServer:
             return WORKFLOWS_CACHE_RAW
         
         # first let's read the files in the ComfyUI workflows directory
-        print(f"Loading workflows from directory: {self.workflows_dir}")
+        print(f"Loading workflows from directory: {AIHUB_WORKFLOWS_DIR}")
 
         # if the directory does not exist, return empty list
-        if path.exists(self.workflows_dir):
+        if path.exists(AIHUB_WORKFLOWS_DIR):
             # otherwise, read the files
-            files = listdir(self.workflows_dir)
+            files = listdir(AIHUB_WORKFLOWS_DIR)
             workflows = []
             for file in files:
                 if file.endswith(".json"):
-                    with open(path.join(self.workflows_dir, file), "r", encoding="utf-8") as f:
+                    with open(path.join(AIHUB_WORKFLOWS_DIR, file), "r", encoding="utf-8") as f:
                         try:
                             workflow_data = json.load(f)
                             workflows.append(workflow_data)
@@ -845,9 +885,9 @@ class AIHubServer:
 
         # add an endpoint to get raw files, this is also useful for retrieving the
         # image files and it is mainly what it is used for
-        app.router.add_static('/workflows/', path=self.workflows_dir, show_index=True)
-        app.router.add_static('/models/', path=self.models_dir, show_index=True)
-        app.router.add_static('/loras/', path=self.loras_dir, show_index=True)
+        app.router.add_static('/workflows/', path=AIHUB_WORKFLOWS_DIR, show_index=True)
+        app.router.add_static('/models/', path=AIHUB_MODELS_DIR, show_index=True)
+        app.router.add_static('/loras/', path=AIHUB_LORAS_DIR, show_index=True)
 
         # Start the server
         self.loop = asyncio.new_event_loop()
