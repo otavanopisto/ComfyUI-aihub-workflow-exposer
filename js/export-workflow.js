@@ -35,19 +35,32 @@ function getWorkflowId(exported) {
     for (const nodeId in exported) {
         const node = exported[nodeId];
         if (node.class_type === "AIHubWorkflowController") {
-            return node.inputs.id;
+            return [node.inputs.id, node.inputs.project_type, node.inputs.project_init];
         }
     }
-    return null;
+    return [null, null, null];
 }
 
 function validateWorkflow(exported) {
-    const workflowId = getWorkflowId(exported);
+    const [workflowId, projectType, projectInit] = getWorkflowId(exported);
     if (!workflowId || workflowId.trim() === "") {
         const dialog = new ComfyDialog()
         dialog.show("Validation Error: The workflow must have a valid workflow id set in the AIHubWorkflowController node");
         return false;
     }
+    
+    if (projectType && projectType.trim() !== "" && !idValidator(projectType)) {
+        const dialog = new ComfyDialog()
+        dialog.show("Validation Error: The project type is invalid, it must be alphanumeric or underscores, and between 3 and 50 characters");
+        return false;
+    }
+
+    if (projectInit && !projectType) {
+        const dialog = new ComfyDialog()
+        dialog.show("Validation Error: The project init is set but the project type is not, you must set a project type if you set a project init");
+        return false;
+    }
+
     // Perform validation on the exported workflow
     // ensure that the exported workflow has at least one output action node that starts with AIHubAction
     const hasOutputAction = Object.keys(exported).some(nodeId => {
@@ -87,6 +100,18 @@ function validateWorkflow(exported) {
     if (repeating_ids.size > 0) {
         const dialog = new ComfyDialog()
         dialog.show("Validation Error: The workflow contains repeating expose ids: " + Array.from(repeating_ids).join(", "));
+        return false;
+    }
+
+    const shouldNotHaveExposeProjectTypes = projectInit || !projectType;
+    const exposeProjectTypes = Object.keys(exported).filter(nodeId => {
+        const node = exported[nodeId];
+        return node.class_type.startsWith("AIHubExposeProject");
+    });
+
+    if (shouldNotHaveExposeProjectTypes && exposeProjectTypes.length > 0) {
+        const dialog = new ComfyDialog()
+        dialog.show("Validation Error: The workflow has a project init or no project type, it should not contain any AIHubExposeProject type nodes");
         return false;
     }
 

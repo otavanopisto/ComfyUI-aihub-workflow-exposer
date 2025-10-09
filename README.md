@@ -48,6 +48,18 @@ Example file:
 
 You can add an image in the same directory with the id as filename, and ending in .png (representing a png image) to make that be the lora image to add as visual aid to the effect that it applies
 
+### Add a lora by workflow
+
+You can add a lora by using an automatic workflow method using the `AIHubMetaExportLora` node, and configuring by hand
+
+![AIHubMetaExportLora](images/AIHubMetaExportLora.png)
+
+The running the workflow will automatically export the lora to the loras folder with the given settings as json as well as the image.
+
+The `AIHubMetaSetExportedLoraImage` can be used to set the image of the lora only.
+
+For actions like deleting do it by hand within the filesystem, these utilities are only meant to aid and prevent mistakes while adding and not to replace manual management.
+
 ## Add a model
 
 In order for a client to have access to a model, it needs to be configured via a model file, a json format file with the following information
@@ -87,6 +99,18 @@ Example file:
  - default_scheduler [required]: the default scheduler for the model
  - default_sampler [required]: the default sampler for the model
 
+### Add a model by workflow
+
+You can add a model by using an automatic workflow method using the `AIHubMetaExportModel` node, and configuring it by hand
+
+![AIHubMetaExportModel](images/AIHubMetaExportModel.png)
+
+Whether the model is a diffusion model is known already simply by the model chosen, however the weight_dtype has to be set in case it is one.
+
+Equally to the lora, an image can be chosen for the model, and the standalone node `AIHubMetaSetExportedModelImage` can be used for that.
+
+NOTE: Exporting models (as well as the loras that apply to them) is only useful for them being selectable by `AIHubExposeModel`, as having a model exported allows them so, however if the workflow is too specific to a model or a specific set of models this is unnecessary to do so, you can load models with `AIHubUtilsLoadModel` based on say a string selection `AIHubExposeStringSelection` without them being exported, the main reason models and loras can be exported is to support workflows that simply can take any of a group or family, for example, simple image generation; and that way installing more models and loras for the same workflow is not cumbersome.
+
 ## Adapt a workflow
 
 First any workflow to be adapted requires a AIHubWorkflowController this merely specifies the id of the workflow as well as other useful data about the workflow.
@@ -104,8 +128,13 @@ The workflow controller should exist in each workflow that is exposed, and repre
  - description: The description to give to the user
  - category: an arbitrary category to place the workflow at
  - context: the context for the workflow
- - project_type [coming soon]: allows to create aihub projects, this represents the type of the project, if a project type is specified the workflow only works with that project type; the advantage of a project is that it can store unique project files that subsequent workflows can later request, this is specially useful, for example, in step by step video generation; in LTXV for example, latent files need to be stored in order to be worked upon further, since working with images is not reasonable; within a project a latent file can be stored once specified.
- - project_type_init [coming soon]: a boolean that allows to specify that the workflow should "start" a new project of the given type, once that is done the project specific workflows are enabled.
+ - project_type: allows to create aihub projects, this represents the type of the project, if a project type is specified the workflow only works with that project type; the advantage of a project is that it can store unique project files that subsequent workflows can later request, this is specially useful, for example, in step by step video generation; in LTXV for example, latent files need to be stored in order to be worked upon further, since working with images is not reasonable; within a project a latent file can be stored once specified.
+ - project_type_init: a boolean that allows to specify that the workflow should "start" a new project of the given type, once that is done the project specific workflows are enabled.
+
+Two buttons are also in there.
+
+ - Validate Workflow: Validates the workflow to find if there are issues that would make it inoperable with the AIHub protocol.
+ - Export to AIHub workflows: Validates and exports the workflow to the workflows folder so that clients can utilize it, optionally also requests for a png image that would represent the workflow.
 
 ### AIHub Expose Integer
 
@@ -125,6 +154,8 @@ The integer expose provides a single integer
 
 ### AIHub Expose Float
 
+The float expose provides a single floating point number
+
 ![AIHubExposeFloat](images/AIHubExposeFloat.png)
 
  - id: Represents the id of the field which should be unique among all other fields in the same workflow
@@ -136,8 +167,11 @@ The integer expose provides a single integer
  - value: The default value for that floating point (also the current value)
  - advanced: Whether it represents an advanced option
  - index: Normally it is at the discretion of the client to figure how to sort the fields, use this to specify a specific ordering
+ - slider: Whether the expose should be a slider of sorts
 
 ### AIHub Expose Boolean
+
+The boolean expose provides a single boolean value
 
 ![AIHubExposeBoolean](images/AIHubExposeBoolean.png)
 
@@ -150,17 +184,118 @@ The integer expose provides a single integer
 
 ### AIHub Expose Seed
 
+You must have seeds exposed to the client as outside of ComfyUI WebUI the random numbers are not generated, ensure randomness of numbers by using this seed generator, it is the client responsability to provide a seed
+
+![AIHubExposeSeed](images/AIHubExposeSeed.png)
+
+ - id: Represents the id of the field which should be unique among all other fields in the same workflow
+ - label: A human readable label to show to the user
+ - tooltip: A tooltip about this and what it represents
+ - value: The default value for that seed (also the current value)
+ - advanced: Whether it represents an advanced option
+ - index: Normally it is at the discretion of the client to figure how to sort the fields, use this to specify a specific ordering
+
 ### AIHub Expose Steps
 
-### AIHub Expose Sampler
+A steps is a simple integer greater than zero, however the main reason it has its separate expose is because it is affected by model default values, unless marked as unaffected
+
+![AIHubExposeSteps](images/AIHubExposeSteps.png)
+
+ - id: Represents the id of the field which should be unique among all other fields in the same workflow
+ - label: A human readable label to show to the user
+ - tooltip: A tooltip about this and what it represents
+ - value: The default value for the steps (also the current value)
+ - advanced: Whether it represents an advanced option
+ - index: Normally it is at the discretion of the client to figure how to sort the fields, use this to specify a specific ordering
+ - unaffected_by_model_steps: If you use a `AIHubExposeModel` the expose steps default value should change to this, the user can still change it but with this option it will force the specific steps
 
 ### AIHub Expose Cfg
 
+The cfg is a simple floating point value greater than zero, however the main reason it has its separate expose is because it is affected by model default values, unless marked as unaffected
+
+![AIHubExposeCfg](images/AIHubExposeCfg.png)
+
+ - id: Represents the id of the field which should be unique among all other fields in the same workflow
+ - label: A human readable label to show to the user
+ - tooltip: A tooltip about this and what it represents
+ - value: The default value for the cfg (also the current value)
+ - advanced: Whether it represents an advanced option
+ - index: Normally it is at the discretion of the client to figure how to sort the fields, use this to specify a specific ordering
+ - unaffected_by_model_cfg: If you use a `AIHubExposeModel` the expose cfg default value should change to this, the user can still change it but with this option it will force the specific cfg
+
+### AIHub Expose Sampler
+
+The sampler is used for model sampling, technically a string; differences on how the different nodes treat SAMPLER values can cause issues within WebUI but not during actual execution.
+
+![AIHubExposeSampler](images/AIHubExposeSampler.png)
+
+ - id: Represents the id of the field which should be unique among all other fields in the same workflow
+ - label: A human readable label to show to the user
+ - tooltip: A tooltip about this and what it represents
+ - value: The default value for the Sampler (also the current value)
+ - advanced: Whether it represents an advanced option
+ - index: Normally it is at the discretion of the client to figure how to sort the fields, use this to specify a specific ordering
+ - unaffected_by_model_sampler: If you use a `AIHubExposeModel` the expose sampler default value should change to this, the user can still change it but with this option it will force the specific sampler
+
 ### AIHub Expose Scheduler
+
+The scheduler is used for model scheduling, technically a string; differences on how the different nodes treat SCHEDULER values can cause issues within WebUI but not during actual execution.
+
+![AIHubExposeScheduler](images/AIHubExposeScheduler.png)
+
+ - id: Represents the id of the field which should be unique among all other fields in the same workflow
+ - label: A human readable label to show to the user
+ - tooltip: A tooltip about this and what it represents
+ - value: The default value for the Scheduler (also the current value)
+ - advanced: Whether it represents an advanced option
+ - index: Normally it is at the discretion of the client to figure how to sort the fields, use this to specify a specific ordering
+ - unaffected_by_model_scheduler: If you use a `AIHubExposeModel` the expose scheduler default value should change to this, the user can still change it but with this option it will force the specific scheduler
 
 ### AIHub Expose Image
 
+One of the cores of AIHub is the ability to expose images from software that has been integrated, exposing an image using the default method means the image is queried from the working directory; the following options are available as inputs:
+
+![AIHubExposeImage](images/AIHubExposeImage.png)
+
+ - id: Represents the id of the field which should be unique among all other fields in the same workflow
+ - label: A human readable label to show to the user
+ - tooltip: A tooltip about this and what it represents
+ - type: the type of the image expose
+ - index: Normally it is at the discretion of the client to figure how to sort the fields, use this to specify a specific ordering
+
+The given ouputs are given
+
+ - image: The image in question.
+ - mask: The mask of the image in question
+ - pos_x: the position x of the image within the client canvas.
+ - pos_y: the position y of the image within the client canvas.
+ - layer_id: an id for the layer of the image within the client canvas.
+ - width: width of the image
+ - height: height of the image
+
+Image Types:
+
+ - current_layer: Provides the current layer that the user is working with, the current layer can be bigger or smaller than the canvas itself, and have any random coordinates within the canvas, current_layer provides the whole image data for that layer, pos_x and pos_y will be the position of the layer in the canvas.
+ - current_layer_at_image_intersection: Provides the current layer that the user is working with but without the areas that are not visible in the canvas (pointless data since it will be invisible), normally it is better to use this when wanting the current_layer, pos_x and pos_y will be the position of this virtual layer intersection.
+ - merged_image: Provides the resulting merged image of all combined layers together at the size of the canvas, excluding any information outside of the canvas, pos_x and pos_y should be zero.
+ - merged_image_without_current_layer: same as merged image but excludes whatever the client considers the current selected layer, pos_x and pos_y should be zero.
+ - merged_image_current_layer_intersection: it first flattens the image getting this merged image result that is the exact size of the canvas, but only provides the intersection with the current layer; so this should be exactly the same as current_layer_at_image_intersection dimension wise and position wise but the image data is all the merged layers.
+ - merged_image_current_layer_intersection_without_current_layer: same as merged_image_current_layer_intersection but without the pixel data from the current layer.
+ - upload: No information from the canvas, upload a new image, pos_x and pos_y are zero because it was never in a canvas.
+
+![Image Explaining the Layers Visually](images/layer_explain.png)
+
+### AIHub Expose Project Image
+
+Meant to only truly exist within a project, once it has been initialized, retrieves a file that represents an image (this is not meant to be shown in the client UI it merely gets the local file)
+
+![AIHubExposeProjectImage](images/AIHubExposeProjectImage.png)
+
+When an image has been saved by an action, this expose basically can retrieve it back by its filename; the point is to be able to chain operations, note that if you are not within a project, retrieving files back is not guaranteed as the client outside of a project can just dispose of everything, this is why the project_type and project_init exist in the workflow controller, the validator will in fact reject such workflows.
+
 ### AIHub Expose Model
+
+Allows for the client to select a model
 
 ### AIHub Action New Image
 
