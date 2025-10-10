@@ -655,7 +655,15 @@ class AIHubExposeImageInfoOnly:
                 "id": ("STRING", {"default": "exposed_image", "tooltip": "A unique custom ID for this workflow."}),
                 "label": ("STRING", {"default": "Image", "tooltip": "This is the label that will appear in the field."}),
                 "tooltip": ("STRING", {"default": "", "tooltip": "An optional tooltip"}),
-                "type": (["current_layer", "merged_image", "merged_image_without_current_layer", "upload"], {"default": "upload", "tooltip": "The source of the image"}),
+                "type": ([
+                    "current_layer",
+                    "current_layer_at_image_intersection",
+                    "merged_image",
+                    "merged_image_without_current_layer",
+                    "merged_image_current_layer_intersection",
+                    "merged_image_current_layer_intersection_without_current_layer",
+                    "upload",
+                ], {"default": "upload", "tooltip": "The source of the image"}),
                 "index": ("INT", {"default": 0, "tooltip": "This value is used for sorting the input fields when displaying; lower values will appear first."}),
             },
             "hidden": {
@@ -677,8 +685,8 @@ class AIHubExposeImageBatch:
     CATEGORY = "aihub/expose"
     FUNCTION = "get_exposed_image_batch"
     
-    RETURN_TYPES = ("IMAGE",)
-    RETURN_NAMES = ("IMAGE",)
+    RETURN_TYPES = ("IMAGE", "MASK", "AIHUB_METADATA", "INT", "INT",)
+    RETURN_NAMES = ("IMAGE", "MASKS", "METADATA", "WIDTH", "HEIGHT",)
 
     @classmethod
     def INPUT_TYPES(s):
@@ -687,30 +695,48 @@ class AIHubExposeImageBatch:
                 "id": ("STRING", {"default": "exposed_image_batch", "tooltip": "A unique custom ID for this workflow."}),
                 "label": ("STRING", {"default": "Image Batch", "tooltip": "This is the label that will appear in the field."}),
                 "tooltip": ("STRING", {"default": "", "tooltip": "An optional tooltip"}),
-                "type": (["new_images", "all_reference_frames", "new_reference_frames"]),
+                "type": (["all_frames", "all_layers_at_image_size", "upload"], {"default": "upload", "tooltip": "The source of the image batch"}),
                 "minlen": ("INT", {"default": 0}),
                 "maxlen": ("INT", {"default": 1000}),
                 "index": ("INT", {"default": 0, "tooltip": "This value is used for sorting the input fields when displaying; lower values will appear first."}),
+                "metadata_fields": ("STRING", {"default": "", "multiline": True, "tooltip": "A newline separated list of metadata fields to include in the metadata JSON for each image in the batch," +
+                                               " add a space with the type next to it, if not specified it will be considered integer, valid types are: INT, FLOAT, FLOAT, STRING and BOOLEAN." +
+                                               " A second space and further allows for specifying modifiers, valid modifiers are SORTED, UNIQUE, REQUIRED, POSITIVE, NONZERO, NONEMPTY, NEGATIVE, MULTILINE. " +
+                                               " It is also possible to add numeric validity modifiers with a colon, for example MAX:100, MAXLEN:100, MIN:0 or MINLEN:0 " +
+                                               " But also a property name provided that property exist in the project and is an expose integer or expose project integer " +
+                                               " Anything after a colon (:) will be considered part of the field name. " +
+                                               " For example: 'frame_number INT POSITIVE REQUIRED SORTED MAX:total_frames; Frame number\nprompt_at_frame STRING NONEMPTY MAXLEN:100; Prompt at frame'"}),
             },
             "hidden": {
                 "local_files": ("STRING", {"default": "[]"}),
+                "width": ("INT", {"default": 512, "tooltip": "The width of the images in the batch"}),
+                "height": ("INT", {"default": 512, "tooltip": "The height of the images in the batch"}),
+                "metadata": ("STRING", {"default": "[]", "tooltip": "The image batch metadata as a JSON string"}),
             }
         }
 
-    def get_exposed_image_batch(self, id, label, tooltip, type, maxlen, index, local_files=None):
+    def get_exposed_image_batch(self, id, label, tooltip, type, maxlen, index, metadata_fields, local_files=None, width=512, height=512, metadata="[]"):
         image_batch = None
         masks = None
+        metadata = None
             
         if local_files:
             # If a local_files string is provided, attempt to load the images.
             try:
                 # Parse the JSON string into a Python list of filenames.
                 filenames = json.loads(local_files)
+                metadata = json.loads(metadata)
+                if not isinstance(metadata, list):
+                    raise ValueError("Error: data is not a valid JSON string encoding an array")
                 if not isinstance(filenames, list):
                     raise ValueError("Error: local_files is not a valid JSON string encoding an array")
                 if len(filenames) > maxlen:
                     raise ValueError(f"Error: {id} contains too many files")
-                
+                if len(metadata) != len(filenames):
+                    raise ValueError(f"Error: {id} the number of files does not match the number of metadata entries")
+
+                ## TODO fix this to actually use the metadata fields, as well as using width and height to resize images if needed
+
                 loaded_images = []
                 loaded_masks = []
                 loader = LoadImage()
@@ -736,7 +762,7 @@ class AIHubExposeImageBatch:
             # Return an empty placeholder if no input is provided.
             raise ValueError("You must specify local_files for this node to function")
         
-        return (image_batch, masks,)
+        return (image_batch, masks, metadata, width, height,)
     
 class AIHubExposeProjectImageBatch:
     """
@@ -1170,6 +1196,8 @@ class AIHubExposeProjectLatent:
         else:
             raise ValueError("You must specify the local_file of the latent for this node to function")
         return (samples,)
+    
+# TODO AIHubExposeProjectFiles
 
 ## Actions
 class AIHubActionNewImage:
@@ -2235,6 +2263,59 @@ class AIHubUtilsLoadLora:
                 model, clip = lora_loader.load_lora(model, clip, lora, strength, strength)
 
         return (model, clip,)
+    
+class AIHubUtilsMetadataMap:
+    """
+    Takes AIHub metadata from the image batch expose and maps it to a string output
+    """
+    CATEGORY = "aihub/utils"
+    FUNCTION = "metadata_map"
+
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("STRING",)
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "metadata": ("AIHUB_METADATA", {"tooltip": "The metadata string from the image batch expose node"}),
+                "field": ("STRING", {"default": "my_field", "tooltip": "The field to concatenate from the metadata"}),
+                "separator": ("STRING", {"default": ",", "tooltip": "The separator to use between multiple values"}),
+                "true_value": ("STRING", {"default": "t", "tooltip": "The value to use for true boolean values"}),
+                "false_value": ("STRING", {"default": "f", "tooltip": "The value to use for false boolean values"}),
+            }
+        }
+
+    def metadata_map(self, metadata, field, separator, true_value, false_value):
+        if not metadata or metadata.strip() == "":
+            return ("",)
+        
+        try:
+            metadata_json = json.loads(metadata)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Error: Could not parse metadata JSON: {e}")
+
+        if not isinstance(metadata_json, list):
+            raise ValueError("Error: Metadata JSON is not a list")
+
+        values = []
+        for item in metadata_json:
+            if field in item:
+                value = item[field]
+                if isinstance(value, bool):
+                    value = true_value if value else false_value
+                elif isinstance(value, (int, float)):
+                    value = str(value)
+                elif isinstance(value, str):
+                    pass  # already a string
+                else:
+                    value = str(value)  # convert other types to string
+                values.append(value)
+
+        result = separator.join(values)
+        return (result,)
+    
+# TODO AIHubUtilsFileToAudio, AIHubUtilsFileToVideo, AIHubUtilsFileToText, AIHubUtilsFileToLatent
     
 # === META NODES ===
 

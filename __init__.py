@@ -57,6 +57,7 @@ NODE_CLASS_MAPPINGS = {
     "AIHubUtilsLoadModel": AIHubUtilsLoadModel,
     "AIHubUtilsLoadCLIP": AIHubUtilsLoadCLIP,
     "AIHubUtilsStrToVector": AIHubUtilsStrToVector,
+    "AIHubUtilsMetadataMap": AIHubUtilsMetadataMap,
 
     "AIHubMetaExportModel": AIHubMetaExportModel,
     "AIHubMetaExportLora": AIHubMetaExportLora,
@@ -122,6 +123,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "AIHubUtilsLoadModel": "AIHub Utils Load Model",
     "AIHubUtilsLoadCLIP": "AIHub Utils Load CLIP",
     "AIHubUtilsStrToVector": "AIHub Utils Str To Vector",
+    "AIHubUtilsMetadataMap": "AIHub Utils Metadata Map",
 
     "AIHubMetaExportModel": "AIHub Meta Export Model",
     "AIHubMetaExportLora": "AIHub Meta Export Lora",

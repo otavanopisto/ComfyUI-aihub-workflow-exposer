@@ -136,7 +136,11 @@ Two buttons are also in there.
  - Validate Workflow: Validates the workflow to find if there are issues that would make it inoperable with the AIHub protocol.
  - Export to AIHub workflows: Validates and exports the workflow to the workflows folder so that clients can utilize it, optionally also requests for a png image that would represent the workflow.
 
-### AIHub Expose Integer
+### Standard Exposes
+
+Expose values for the workflow, should work within any context
+
+#### AIHub Expose Integer
 
 The integer expose provides a single integer
 
@@ -152,7 +156,7 @@ The integer expose provides a single integer
  - advanced: Whether it represents an advanced option
  - index: Normally it is at the discretion of the client to figure how to sort the fields, use this to specify a specific ordering
 
-### AIHub Expose Float
+#### AIHub Expose Float
 
 The float expose provides a single floating point number
 
@@ -169,7 +173,7 @@ The float expose provides a single floating point number
  - index: Normally it is at the discretion of the client to figure how to sort the fields, use this to specify a specific ordering
  - slider: Whether the expose should be a slider of sorts
 
-### AIHub Expose Boolean
+#### AIHub Expose Boolean
 
 The boolean expose provides a single boolean value
 
@@ -182,7 +186,23 @@ The boolean expose provides a single boolean value
  - advanced: Whether it represents an advanced option
  - index: Normally it is at the discretion of the client to figure how to sort the fields, use this to specify a specific ordering
 
-### AIHub Expose Seed
+#### AIHub Expose String
+
+The string expose provides a single string value
+
+![AIHubExposeString](images/AIHubExposeString.png)
+
+ - id: Represents the id of the field which should be unique among all other fields in the same workflow
+ - label: A human readable label to show to the user
+ - tooltip: A tooltip about this and what it represents
+ - minlen: the minimum length of the string value
+ - maxlen: the maximum length of the string value
+ - value: The default value for that boolean (also the current value)
+ - multiline: Whether newlines are allowed
+ - advanced: Whether it represents an advanced option
+ - index: Normally it is at the discretion of the client to figure how to sort the fields, use this to specify a specific ordering
+
+#### AIHub Expose Seed
 
 You must have seeds exposed to the client as outside of ComfyUI WebUI the random numbers are not generated, ensure randomness of numbers by using this seed generator, it is the client responsability to provide a seed
 
@@ -195,7 +215,7 @@ You must have seeds exposed to the client as outside of ComfyUI WebUI the random
  - advanced: Whether it represents an advanced option
  - index: Normally it is at the discretion of the client to figure how to sort the fields, use this to specify a specific ordering
 
-### AIHub Expose Steps
+#### AIHub Expose Steps
 
 A steps is a simple integer greater than zero, however the main reason it has its separate expose is because it is affected by model default values, unless marked as unaffected
 
@@ -209,7 +229,7 @@ A steps is a simple integer greater than zero, however the main reason it has it
  - index: Normally it is at the discretion of the client to figure how to sort the fields, use this to specify a specific ordering
  - unaffected_by_model_steps: If you use a `AIHubExposeModel` the expose steps default value should change to this, the user can still change it but with this option it will force the specific steps
 
-### AIHub Expose Cfg
+#### AIHub Expose Cfg
 
 The cfg is a simple floating point value greater than zero, however the main reason it has its separate expose is because it is affected by model default values, unless marked as unaffected
 
@@ -223,7 +243,7 @@ The cfg is a simple floating point value greater than zero, however the main rea
  - index: Normally it is at the discretion of the client to figure how to sort the fields, use this to specify a specific ordering
  - unaffected_by_model_cfg: If you use a `AIHubExposeModel` the expose cfg default value should change to this, the user can still change it but with this option it will force the specific cfg
 
-### AIHub Expose Sampler
+#### AIHub Expose Sampler
 
 The sampler is used for model sampling, technically a string; differences on how the different nodes treat SAMPLER values can cause issues within WebUI but not during actual execution.
 
@@ -237,7 +257,7 @@ The sampler is used for model sampling, technically a string; differences on how
  - index: Normally it is at the discretion of the client to figure how to sort the fields, use this to specify a specific ordering
  - unaffected_by_model_sampler: If you use a `AIHubExposeModel` the expose sampler default value should change to this, the user can still change it but with this option it will force the specific sampler
 
-### AIHub Expose Scheduler
+#### AIHub Expose Scheduler
 
 The scheduler is used for model scheduling, technically a string; differences on how the different nodes treat SCHEDULER values can cause issues within WebUI but not during actual execution.
 
@@ -251,7 +271,7 @@ The scheduler is used for model scheduling, technically a string; differences on
  - index: Normally it is at the discretion of the client to figure how to sort the fields, use this to specify a specific ordering
  - unaffected_by_model_scheduler: If you use a `AIHubExposeModel` the expose scheduler default value should change to this, the user can still change it but with this option it will force the specific scheduler
 
-### AIHub Expose Image
+#### AIHub Expose Image
 
 One of the cores of AIHub is the ability to expose images from software that has been integrated, exposing an image using the default method means the image is queried from the working directory; the following options are available as inputs:
 
@@ -285,27 +305,199 @@ Image Types:
 
 ![Image Explaining the Layers Visually](images/layer_explain.png)
 
-### AIHub Expose Project Image
+NOTE: if you only need the information of a given image you can use the (Info Only) node, the options are exactly the same but provides the information only and not the image pixel data
 
-Meant to only truly exist within a project, once it has been initialized, retrieves a file that represents an image (this is not meant to be shown in the client UI it merely gets the local file)
+![AIHubExposeImageInfoOnly](images/AIHubExposeImageInfoOnly.png)
+
+#### AIHub Expose Image Batch
+
+The expose image batch allows to expose a series of images into an image batch tensor, as well as metadata alongside of it, it is one of the most complex nodes meant to be used from video generation, handling, and lora training.
+
+ - id: Represents the id of the field which should be unique among all other fields in the same workflow
+ - label: A human readable label to show to the user
+ - tooltip: A tooltip about this and what it represents
+ - type: all_frames, all_layers_at_image_size or upload; for the different possible combinations just to let the client know what it has to send, the client may decide which extra metadata to append
+ - minlen: the minimum length of the batch
+ - maxlen: the maximum length of the batch
+ - index: Normally it is at the discretion of the client to figure how to sort the fields, use this to specify a specific ordering
+ - metadata_fields: image batch can have extra metadata appended to it, the purpose is to specify extra details for example when specifying frame numbers or prompts for the specific images that are given, there is a specific way to how to specify each metadata field, following
+
+[field_id] [TYPE] [MODIFIERS...]; [label]
+
+ - field_id: Can be any valid json id
+ - TYPE: must be either `INT` `FLOAT` `BOOLEAN` or `STRING`
+ - MODIFIERS (basic): allowed are for numeric types: `SORTED` `POSITIVE` `NEGATIVE` `NONZERO`, for numeric and string: `UNIQUE`, for string: `REQUIRED` `NONEMPTY` and `MULTILINE`
+ - MODIFIERS (validators): allowed are for numeric types: `MAX:(number or expose id)` `MIN:(number or expose id)` and for string `MAXLEN:(number or expose id)` `MINLEN:(number or expose id)`; example `MAX:100` or `MAX:maximum_count` where `maximum_count` is the id of another property exposed that is either an integer or a project integer that is exposed, the property must be exposed
+ - label: Just a human readable label for the client
+
+The values for the metadata will be provided as a json object in the metadata output, the metadata output can be processed by `AIHub Utils Metadata Map` in order to map one single value for data input into a string; but if more complex behaviour is required, like that on creating loras from image batches, it is expected that a custom node is to be written to handle it; since node handling is not going to cut it.
+
+#### AIHub Expose Audio
+
+#### AIHub Expose Video
+
+#### AIHub Expose Model
+
+Allows for the client to select a model as well as apply any applicable loras (provided it is allowed)
+
+![AIHubExposeModel](images/AIHubExposeModel.png)
+
+Use of this selector is discouraged unless you want to specify an initial value, since it can be rather complicated to setup.
+
+ - id: Represents the id of the field which should be unique among all other fields in the same workflow
+ - label: A human readable label to show to the user
+ - model: The model name within the checkpoints or diffusion_models folder (Default value)
+ - loras: loras to load for the model, comma separated (default value)
+ - loras_strengths: the strengths for the loras as a list of comma separated floating point values that must match the loras list (default value)
+ - loras_use_loader_model_only: a comma separate list of t or f (True or False) for whether the loras are applied to both the clip and the model or just the model, t is for model only (default value)
+ - is_diffusion_model: whether the model to load from the default value is a diffusion model from the diffusion_model folder (default value)
+ - diffusion_model_weight_dtype: the diffusion model weight dtype for a diffusion model (default value)
+ - limit_to_family: limit the model selection to a specific family
+ - limit_to_group: limit the model selection to a specific group
+ - tooltip: The tooltip for the model selector
+ - advanced: whether it should be displayed as advanced options
+ - index: Normally it is at the discretion of the client to figure how to sort the fields, use this to specify a specific ordering
+ - disable_loras_selection: does not allow the user to select a lora
+ - disable_model_selection: does not allow the user to select a model (only lora)
+ - optional_vae: optional vae to use with the model instead of the checkpoint vae
+ - optional_clip: optional clip to use with the model, a comma separated list of two clips can be used to specify a DualClipLoader
+ - optional_clip_type: optional clip type to use with the model, applies to both clips if two have been set
+
+If you do not need any of this advanced functionality, and you just with the user to select a model, limited to a family or group, you can use the simplified version instead (the real use of the standard version is realisticaly only to select loras for a given specific model)
+
+![AIHubExposeModelSimple](images/AIHubExposeModelSimple.png)
+
+This removes the advanced options and keeps only the basics
+
+### Project Exposes
+
+Exposes meant to only truly exist within a project, once it has been initialized; they are meant to expose a value from the client to the server without the awareness of the client as those are hidden values meant for use within the project.
+
+Projects are composed of files that have been created by actions and simple data, how it is stored and handled it is up to the client.
+
+The most basic case is simply a folder with a `config.json` file and another folder with the files, however it is not up to the server to determine how it is done; for instance the Gimp AIHub does timelines and allows for rollback as well as storing multiple details on the default values of exposes, but a web client can use something else instead like IndexedDB for the files or using the FileSystem API.
+
+Project Exposes must exist within the project context, specified by the `AIHubWorkflowController` so it must not be `project_init` and it must have a `project_type`, which means an already initialized project with files within it or whatever is required for basic usage.
+
+#### AIHub Expose Project Config Boolean
+
+Gets the configuration value as a boolean from the project configuration file (or whatever the client uses)
+
+#### AIHub Expose Project Config Integer
+
+Gets the configuration value as an integer from the project configuration file (or whatever the client uses)
+
+#### AIHub Expose Project Config Float
+
+Gets the configuration value as a float from the project configuration file (or whatever the client uses)
+
+#### AIHub Expose Project Config String
+
+Gets the configuration value as a string from the project configuration file (or whatever the client uses)
+
+#### AIHub Expose Project Text
+
+Retrieves a file as text value
+
+#### AIHub Expose Project Image
+
+Retrieves a file that represents an image
 
 ![AIHubExposeProjectImage](images/AIHubExposeProjectImage.png)
 
-When an image has been saved by an action, this expose basically can retrieve it back by its filename; the point is to be able to chain operations, note that if you are not within a project, retrieving files back is not guaranteed as the client outside of a project can just dispose of everything, this is why the project_type and project_init exist in the workflow controller, the validator will in fact reject such workflows.
+#### AIHub Expose Project Image Batch
 
-### AIHub Expose Model
+Retrieves an image batch (or series of images) from the project files that have been previously stored.
 
-Allows for the client to select a model
+Use this whenever while using an action to create an image you used append, it is also possible to limit the images fetched by using indexing.
 
-### AIHub Action New Image
+#### AIHub Expose Project Audio
 
-### AIHub Action New Layer
+Retrieves a file that represents audio
+
+#### AIHub Expose Project Video
+
+Retrieves a file that represents a video that must be loaded, the expose project video function cannot load a video file and it must be done by another node
+
+#### AIHub Expose Project Latent
+
+Retrieves a file that represents a torch latent tensor representatio
+
+#### AIHub Expose Project File
+
+Retrieves a file, and does not process it merely getting the filename; however it allows for batch loading, since both Audio, Video and Latent cannot be concatenated as they are already a concatenation and that is not used anywhere within any workflow; however for the client batches of these are real and may represent a progression or selection
+
+Check out `AIHubUtilsFileToAudio` `AIHubUtilsFileToVideo` `AIHubUtilsFileToText` and `AIHubUtilsFileToLatent`
+
+### Actions
+
+Actions are executed to provide output to the client
+
+If an action occurs within a project that file is meant to be stored within the project boundaries and should be able to be retrieved later
+
+#### AIHub Action New Text
+
+#### AIHub Action New Image
+
+#### AIHub Action New Layer
+
+#### AIHub Action New Image Batch
+
+#### AIHub Action New Audio
+
+#### AIHub Action New Audio Segment
+
+#### AIHub Action New Video
+
+#### AIHub Action New Video Segment
+
+#### AIHub Action Set Project Config Boolean
+
+#### AIHub Action Set Project Config Integer
+
+#### AIHub Action Set Project Config Float
+
+#### AIHub Action Set Project Config String
+
+### Utilities
+
+#### AIHub Utils Crop Merged Image To Layer Size
+
+#### AIHub Utils Fit Layer To Merged Image
+
+#### AIHub Utils Float To Int
+
+#### AIHub Utils Str To Float
+
+#### AIHub Utils Load VAE
+
+#### AIHub Utils Load Lora
+
+#### AIHub Utils Load Model
+
+#### AIHub Utils Load CLIP
+
+#### AIHub Utils Str To Vector
+
+#### AIHub Utils Metadata Map
+
+#### AIHub Utils File to Audio
+
+#### AIHub Utils File to Video
+
+#### AIHub Utils File to Latent
+
+#### AIHub Utils File to Text
 
 ### Exporting the workflow
 
 You need to enable export as API in comfyUI to export the workflow in API format and save it into the `aihub/workflows` folder
 
 An image with the same id as the workflow id as specified in the AIHubWorkflowController node and ending in png will serve as the image for the given workflow.
+
+![AIHubWorkflowController](images/AIHubWorkflowController.png)
+
+You can use the buttons export and validate to export the workflow to the given folder
 
 ## Environment Variables
 
@@ -324,3 +516,9 @@ Normally existing at the `ComfyUI/aihub` directory of the comfyui installation, 
 Temporary files of what the user has send via the websocket are by default removed per connection, leaving no trace, if you have a setting where you need to review the files that users have uploaded to the server for [insert anti-privacy reason here] you can do that with `AIHUB_PERSIST_TEMPFILES=1`
 
 Default `0`
+
+### AIHUB_TEMP_DIR
+
+Default `(the os temporary directory)`
+
+The temporary directory to use to store the temporary files that the client created
