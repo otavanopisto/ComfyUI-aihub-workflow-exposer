@@ -313,6 +313,8 @@ NOTE: if you only need the information of a given image you can use the (Info On
 
 The expose image batch allows to expose a series of images into an image batch tensor, as well as metadata alongside of it, it is one of the most complex nodes meant to be used from video generation, handling, and lora training.
 
+![AIHubExposeImageBatch](images/AIHubExposeImageBatch.png)
+
  - id: Represents the id of the field which should be unique among all other fields in the same workflow
  - label: A human readable label to show to the user
  - tooltip: A tooltip about this and what it represents
@@ -334,7 +336,39 @@ The values for the metadata will be provided as a json object in the metadata ou
 
 #### AIHub Expose Audio
 
+The expose audio node allows for exposing audio from audio samplers or just as an uploaded file
+
+![AIHubExposeAudio](images/AIHubExposeAudio.png)
+
+ - id: Represents the id of the field which should be unique among all other fields in the same workflow
+ - label: A human readable label to show to the user
+ - tooltip: A tooltip about this and what it represents
+ - type: the type of the audio expose
+ - index: Normally it is at the discretion of the client to figure how to sort the fields, use this to specify a specific ordering
+
+Audio Types:
+
+ - current_segment: a segment of the audio
+ - merged_audio: the entire merged audio as a whole
+ - upload: upload a audio file
+
 #### AIHub Expose Video
+
+The expose video node allows for exposing a video from video editors or just as an uploaded file
+
+![AIHubExposeVideo](images/AIHubExposeVideo.png)
+
+ - id: Represents the id of the field which should be unique among all other fields in the same workflow
+ - label: A human readable label to show to the user
+ - tooltip: A tooltip about this and what it represents
+ - type: the type of the video expose
+ - index: Normally it is at the discretion of the client to figure how to sort the fields, use this to specify a specific ordering
+
+Video Types:
+
+ - current_segment: a segment of the video
+ - merged_video: the entire video with all segments merged
+ - upload: upload a video file
 
 #### AIHub Expose Model
 
@@ -411,6 +445,10 @@ Retrieves an image batch (or series of images) from the project files that have 
 
 Use this whenever while using an action to create an image you used append, it is also possible to limit the images fetched by using indexing.
 
+ - id: Represents the id of the field which should be unique among all other fields in the same workflow
+ - file_name: Represents the file name to be loaded with the given extension
+ - indexes: The indexing to retrieve, specify indexes with comma separation, use negative or positive, or specify a range
+
 #### AIHub Expose Project Audio
 
 Retrieves a file that represents audio
@@ -419,15 +457,25 @@ Retrieves a file that represents audio
 
 Retrieves a file that represents a video that must be loaded, the expose project video function cannot load a video file and it must be done by another node
 
+![AIHubExposeProjectVideo](images/AIHubExposeProjectImage.png)
+
 #### AIHub Expose Project Latent
 
 Retrieves a file that represents a torch latent tensor representatio
 
 #### AIHub Expose Project File
 
-Retrieves a file, and does not process it merely getting the filename; however it allows for batch loading, since both Audio, Video and Latent cannot be concatenated as they are already a concatenation and that is not used anywhere within any workflow; however for the client batches of these are real and may represent a progression or selection
+Retrieves a file, and does not process it merely getting the filename; this node works in a similar way to expose Project video where it merely gives a filepath
 
 Check out `AIHubUtilsFileToAudio` `AIHubUtilsFileToVideo` `AIHubUtilsFileToText` and `AIHubUtilsFileToLatent`
+
+#### AIHub Expose Project File Batch
+
+Retrieves a file, and does not process it merely getting the filename; however it allows for batch loading, since both Audio, Video and Latent cannot be concatenated as they are already a concatenation and that is not used anywhere within any workflow; however for the client batches of these are real and may represent a progression or selection
+
+ - id: Represents the id of the field which should be unique among all other fields in the same workflow
+ - file_name: Represents the file name to be loaded with the given extension
+ - indexes: The indexing to retrieve, specify indexes with comma separation, use negative or positive, or specify a range
 
 ### Actions
 
@@ -487,7 +535,7 @@ If an action occurs within a project that file is meant to be stored within the 
 
 #### AIHub Utils File to Latent
 
-#### AIHub Utils File to Text
+#### AIHub Utils File to Text 
 
 ### Exporting the workflow
 
