@@ -417,27 +417,49 @@ Project Exposes must exist within the project context, specified by the `AIHubWo
 
 Gets the configuration value as a boolean from the project configuration file (or whatever the client uses)
 
+ - id: Represents the id of the field which should be unique among all other fields in the same workflow
+ - field: Represents the field to retrieve, use dots to access sublevels
+ - default: A default value in case the field does not exist or does not have a value
+
 #### AIHub Expose Project Config Integer
 
 Gets the configuration value as an integer from the project configuration file (or whatever the client uses)
+
+ - id: Represents the id of the field which should be unique among all other fields in the same workflow
+ - field: Represents the field to retrieve, use dots to access sublevels
+ - default: A default value in case the field does not exist or does not have a value
 
 #### AIHub Expose Project Config Float
 
 Gets the configuration value as a float from the project configuration file (or whatever the client uses)
 
+ - id: Represents the id of the field which should be unique among all other fields in the same workflow
+ - field: Represents the field to retrieve, use dots to access sublevels
+ - default: A default value in case the field does not exist or does not have a value
+
 #### AIHub Expose Project Config String
 
 Gets the configuration value as a string from the project configuration file (or whatever the client uses)
 
+ - id: Represents the id of the field which should be unique among all other fields in the same workflow
+ - field: Represents the field to retrieve, use dots to access sublevels
+ - default: A default value in case the field does not exist or does not have a value
+
 #### AIHub Expose Project Text
 
 Retrieves a file as text value
+
+ - id: Represents the id of the field which should be unique among all other fields in the same workflow
+ - file_name: the filename of the given file to be read as text
 
 #### AIHub Expose Project Image
 
 Retrieves a file that represents an image
 
 ![AIHubExposeProjectImage](images/AIHubExposeProjectImage.png)
+
+ - id: Represents the id of the field which should be unique among all other fields in the same workflow
+ - file_name: the filename of the given file to be read as an image file
 
 #### AIHub Expose Project Image Batch
 

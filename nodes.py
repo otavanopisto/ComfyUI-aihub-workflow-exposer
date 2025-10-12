@@ -190,6 +190,7 @@ class AIHubExposeProjectConfigInteger:
     def INPUT_TYPES(s):
         return {
             "required": {
+                "id": ("STRING", {"default": "boolean", "tooltip": "A unique custom id for this workflow."}),
                 "field": ("STRING", {"default": "my-field", "tooltip": "The field to expose, use dots for entering sublevels"}),
                 "default": ("INT", {"default": 0, "min": -2147483648, "max": 2147483647, "tooltip": "The default value of the field"}),
             },
@@ -198,7 +199,7 @@ class AIHubExposeProjectConfigInteger:
             }
         }
 
-    def get_exposed_int(self, field, default, value=None):
+    def get_exposed_int(self, id, field, default, value=None):
         return (value if value is not None else default,)
     
 class AIHubExposeFloat:
@@ -282,6 +283,7 @@ class AIHubExposeProjectConfigFloat:
     def INPUT_TYPES(s):
         return {
             "required": {
+                "id": ("STRING", {"default": "boolean", "tooltip": "A unique custom id for this workflow."}),
                 "field": ("STRING", {"default": "my-field", "tooltip": "The field to expose, use dots for entering sublevels"}),
                 "default": ("FLOAT", {"default": 0.0, "min": -1.0e+20, "max": 1.0e+20, "tooltip": "The default value of the field"}),
             },
@@ -290,7 +292,7 @@ class AIHubExposeProjectConfigFloat:
             }
         }
 
-    def get_exposed_float(self, field, default, value=None):
+    def get_exposed_float(self, id, field, default, value=None):
         return (value if value is not None else default,)
     
 class AIHubExposeBoolean:
@@ -332,6 +334,7 @@ class AIHubExposeProjectConfigBoolean:
     def INPUT_TYPES(s):
         return {
             "required": {
+                "id": ("STRING", {"default": "boolean", "tooltip": "A unique custom id for this workflow."}),
                 "field": ("STRING", {"default": "my-field", "tooltip": "The field to expose, use dots for entering sublevels"}),
                 "default": ("BOOLEAN", {"default": True, "tooltip": "The default value of the field"}),
             },
@@ -340,7 +343,7 @@ class AIHubExposeProjectConfigBoolean:
             }
         }
 
-    def get_exposed_boolean(self, field, default, value=None):
+    def get_exposed_boolean(self, id,field, default, value=None):
         return (value if value is not None else default,)
     
 class AIHubExposeString:
@@ -389,6 +392,7 @@ class AIHubExposeProjectConfigString:
     def INPUT_TYPES(s):
         return {
             "required": {
+                "id": ("STRING", {"default": "boolean", "tooltip": "A unique custom id for this workflow."}),
                 "field": ("STRING", {"default": "my-field", "tooltip": "The field to expose, use dots for entering sublevels"}),
                 "default": ("STRING", {"default": "", "tooltip": "The default value of the field"}),
             },
@@ -397,7 +401,7 @@ class AIHubExposeProjectConfigString:
             }
         }
 
-    def get_exposed_string(self, field, default, value=None):
+    def get_exposed_string(self, id, field, default, value=None):
         return (value if value is not None else default,)
 
 class AIHubExposeStringSelection:
@@ -706,20 +710,26 @@ class AIHubExposeImageBatch:
                                                " But also a property name provided that property exist in the project and is an expose integer or expose project integer " +
                                                " Anything after a colon (:) will be considered part of the field name. " +
                                                " For example: 'frame_number INT POSITIVE REQUIRED SORTED MAX:total_frames; Frame number\nprompt_at_frame STRING NONEMPTY MAXLEN:100; Prompt at frame'"}),
+                "normalize_at_width": ("INT", {"default": 0, "tooltip": "If greater than 0, it will resize all images to this width, requiring normalize_at_height to be set, by default normalization is otherwise done at the image with most megapixels"}),
+                "normalize_at_height": ("INT", {"default": 0, "tooltip": "If greater than 0, it will resize all images to this height, requiring normalize_at_width to be set, by default normalization is otherwise done at the image with most megapixels"}),
+                "normalize_upscale_method": (["nearest-exact", "bilinear", "area", "bicubic", "lanczos"], {"default": "nearest-exact", "tooltip": "The method to use when upscaling images"}),
             },
             "hidden": {
                 "local_files": ("STRING", {"default": "[]"}),
-                "width": ("INT", {"default": 512, "tooltip": "The width of the images in the batch"}),
-                "height": ("INT", {"default": 512, "tooltip": "The height of the images in the batch"}),
                 "metadata": ("STRING", {"default": "[]", "tooltip": "The image batch metadata as a JSON string"}),
             }
         }
 
-    def get_exposed_image_batch(self, id, label, tooltip, type, maxlen, index, metadata_fields, local_files=None, width=512, height=512, metadata="[]"):
+    def get_exposed_image_batch(self, id, label, tooltip, type, maxlen, index, metadata_fields, normalize_at_width, normalize_at_height, normalize_upscale_method, local_files=None, metadata="[]"):
         image_batch = None
         masks = None
         metadata = None
-            
+
+        if normalize_at_width != 0 and normalize_at_height == 0:
+            raise ValueError("Error: normalize_at_width requires normalize_at_height to be set as well")
+        if normalize_at_height != 0 and normalize_at_width == 0:
+            raise ValueError("Error: normalize_at_height requires normalize_at_width to be set as well")
+
         if local_files:
             # If a local_files string is provided, attempt to load the images.
             try:
@@ -751,7 +761,44 @@ class AIHubExposeImageBatch:
                     else:
                         filenameOnly = os.path.basename(filename)
                         raise ValueError(f"Error: Image file not found: {filenameOnly}")
-                
+
+                normalize_width = normalize_at_width
+                normalize_height = normalize_at_height
+                normalize_megapixels = (normalize_width * normalize_height) / 1_000_000
+
+                if normalize_width == 0 and normalize_height == 0:
+                    for i in range(len(loaded_images)):
+                        img = loaded_images[i]
+                        _, h, w, _ = img.shape
+                        image_megapixels = (w * h) / 1_000_000
+                        if image_megapixels > normalize_megapixels:
+                            normalize_width = w
+                            normalize_height = h
+                            break
+
+                for i in range(len(loaded_images)):
+                    img = loaded_images[i]
+                    mask = loaded_masks[i]
+                    _, h, w, _ = img.shape
+                    if is_first:
+                        is_first = False
+                        if normalize_width == 0 and normalize_height == 0:
+                            normalize_width = w
+                            normalize_height = h
+                    
+                    if w != normalize_width or h != normalize_height:
+                        samples = img.movedim(-1, 1)  # NHWC -> NCHW
+                        samples = comfy.utils.common_upscale(
+                            samples, normalize_width, normalize_height, normalize_upscale_method, crop="center"
+                        )
+                        loaded_images[i] = samples.movedim(1, -1)  # NCHW -> NHWC
+                        if mask is not None:
+                            mask = torch.nn.functional.interpolate(mask.reshape((-1, 1, mask.shape[-2], mask.shape[-1])), size=(height, width), mode='bilinear', align_corners=True)
+                            crop_x = (normalize_width - w) // 2
+                            crop_y = (normalize_height - h) // 2
+                            mask = mask[:, :, crop_y:crop_y+normalize_height, crop_x:crop_x+normalize_width]
+                            loaded_masks[i] = mask
+
                 # Concatenate all the images into a single batch tensor.
                 image_batch = torch.cat(loaded_images, dim=0)
                 masks = torch.cat(loaded_masks, dim=0)
@@ -781,13 +828,15 @@ class AIHubExposeProjectImageBatch:
             "required": {
                 "id": ("STRING", {"default": "exposed_image_batch", "tooltip": "A unique custom ID for this workflow."}),
                 "file_name": ("STRING", {"default": "exposed_image_batch.png", "tooltip": "The filename of the image batch as stored in the project files, including extension, without the number counter"}),
+                "indexes": ("STRING", {"default": "", "tooltip": "A comma separated list of indexes to load from the image batch" +
+                                       " For example: '0,1,2' to load the first three images, or a range like '0-4' to load the first five images; negative indexes are supported as well"}),
             },
             "hidden": {
                 "local_files": ("STRING", {"default": "[]"}),
             }
         }
 
-    def get_exposed_image_batch(self, id, file_name, local_files=None):
+    def get_exposed_image_batch(self, id, file_name, indexes, local_files=None):
         image_batch = None
         masks = None
         if local_files:
