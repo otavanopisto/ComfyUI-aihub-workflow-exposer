@@ -115,10 +115,11 @@ function validateWorkflow(exported) {
         return false;
     }
 
+    // TODO validate batch_index should be an integer if set
+    // TODO validate indexes in batch nodes should be a comma separated list of integers or ranges
     // TODO validate AIHubExposeModel and AIHubExposeModelSimple nodes to see if the values are valid models and loras
     // TODO validate AIHubExposeImageBatch node to see if metadata fields are valid
     // TODO validate that no AIHubExpose nodes have connected values to their inputs since they must be static
-    // TODO these validations should allow for exceptions as only id and file_name are required to be static, other fields can be connected
 
     return workflowId;
 }

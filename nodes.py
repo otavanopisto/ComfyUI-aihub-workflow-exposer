@@ -11,6 +11,8 @@ import comfy.samplers
 import safetensors.torch
 from comfy.cli_args import args
 from comfy_extras.nodes_audio import load as load_audio_file
+from torch.nn.functional import interpolate
+from comfy.utils import common_upscale
 
 from PIL import Image
 
@@ -710,9 +712,9 @@ class AIHubExposeImageBatch:
                                                " But also a property name provided that property exist in the project and is an expose integer or expose project integer " +
                                                " Anything after a colon (:) will be considered part of the field name. " +
                                                " For example: 'frame_number INT POSITIVE REQUIRED SORTED MAX:total_frames; Frame number\nprompt_at_frame STRING NONEMPTY MAXLEN:100; Prompt at frame'"}),
-                "normalize_at_width": ("INT", {"default": 0, "tooltip": "If greater than 0, it will resize all images to this width, requiring normalize_at_height to be set, by default normalization is otherwise done at the image with most megapixels"}),
-                "normalize_at_height": ("INT", {"default": 0, "tooltip": "If greater than 0, it will resize all images to this height, requiring normalize_at_width to be set, by default normalization is otherwise done at the image with most megapixels"}),
-                "normalize_upscale_method": (["nearest-exact", "bilinear", "area", "bicubic", "lanczos"], {"default": "nearest-exact", "tooltip": "The method to use when upscaling images"}),
+            },
+            "optional": {
+                "normalizer": ("AIHUB_NORMALIZER", {"tooltip": "The method to use for normalizing the images in the batch, if not specified it will use the image with the most megapixels as the target size with a nearest-exact upscaler"}),
             },
             "hidden": {
                 "local_files": ("STRING", {"default": "[]"}),
@@ -720,15 +722,12 @@ class AIHubExposeImageBatch:
             }
         }
 
-    def get_exposed_image_batch(self, id, label, tooltip, type, maxlen, index, metadata_fields, normalize_at_width, normalize_at_height, normalize_upscale_method, local_files=None, metadata="[]"):
+    def get_exposed_image_batch(self, id, label, tooltip, type, maxlen, index, metadata_fields, normalizer=None, local_files=None, metadata="[]"):
         image_batch = None
         masks = None
         metadata = None
-
-        if normalize_at_width != 0 and normalize_at_height == 0:
-            raise ValueError("Error: normalize_at_width requires normalize_at_height to be set as well")
-        if normalize_at_height != 0 and normalize_at_width == 0:
-            raise ValueError("Error: normalize_at_height requires normalize_at_width to be set as well")
+        width = 0
+        height = 0
 
         if local_files:
             # If a local_files string is provided, attempt to load the images.
@@ -761,43 +760,9 @@ class AIHubExposeImageBatch:
                     else:
                         filenameOnly = os.path.basename(filename)
                         raise ValueError(f"Error: Image file not found: {filenameOnly}")
-
-                normalize_width = normalize_at_width
-                normalize_height = normalize_at_height
-                normalize_megapixels = (normalize_width * normalize_height) / 1_000_000
-
-                if normalize_width == 0 and normalize_height == 0:
-                    for i in range(len(loaded_images)):
-                        img = loaded_images[i]
-                        _, h, w, _ = img.shape
-                        image_megapixels = (w * h) / 1_000_000
-                        if image_megapixels > normalize_megapixels:
-                            normalize_width = w
-                            normalize_height = h
-                            break
-
-                for i in range(len(loaded_images)):
-                    img = loaded_images[i]
-                    mask = loaded_masks[i]
-                    _, h, w, _ = img.shape
-                    if is_first:
-                        is_first = False
-                        if normalize_width == 0 and normalize_height == 0:
-                            normalize_width = w
-                            normalize_height = h
                     
-                    if w != normalize_width or h != normalize_height:
-                        samples = img.movedim(-1, 1)  # NHWC -> NCHW
-                        samples = comfy.utils.common_upscale(
-                            samples, normalize_width, normalize_height, normalize_upscale_method, crop="center"
-                        )
-                        loaded_images[i] = samples.movedim(1, -1)  # NCHW -> NHWC
-                        if mask is not None:
-                            mask = torch.nn.functional.interpolate(mask.reshape((-1, 1, mask.shape[-2], mask.shape[-1])), size=(height, width), mode='bilinear', align_corners=True)
-                            crop_x = (normalize_width - w) // 2
-                            crop_y = (normalize_height - h) // 2
-                            mask = mask[:, :, crop_y:crop_y+normalize_height, crop_x:crop_x+normalize_width]
-                            loaded_masks[i] = mask
+                normalizer = normalizer if normalizer is not None else Normalizer(0, 0, "nearest-exact")
+                image_batch, masks, width, height = normalizer.normalize(loaded_images, loaded_masks)
 
                 # Concatenate all the images into a single batch tensor.
                 image_batch = torch.cat(loaded_images, dim=0)
@@ -819,8 +784,8 @@ class AIHubExposeProjectImageBatch:
     CATEGORY = "aihub/expose/config"
     FUNCTION = "get_exposed_image_batch"
 
-    RETURN_TYPES = ("IMAGE",)
-    RETURN_NAMES = ("IMAGE",)
+    RETURN_TYPES = ("IMAGE", "MASK", "INT", "INT",)
+    RETURN_NAMES = ("IMAGE", "MASK", "WIDTH", "HEIGHT")
 
     @classmethod
     def INPUT_TYPES(s):
@@ -831,14 +796,17 @@ class AIHubExposeProjectImageBatch:
                 "indexes": ("STRING", {"default": "", "tooltip": "A comma separated list of indexes to load from the image batch" +
                                        " For example: '0,1,2' to load the first three images, or a range like '0-4' to load the first five images; negative indexes are supported as well"}),
             },
+            "optional": {
+                "normalizer": ("AIHUB_NORMALIZER", {"tooltip": "The method to use for normalizing the images in the batch, if not specified it will use the image with the most megapixels as the target size with a nearest-exact upscaler"}),
+            },
             "hidden": {
                 "local_files": ("STRING", {"default": "[]"}),
             }
         }
 
-    def get_exposed_image_batch(self, id, file_name, indexes, local_files=None):
-        image_batch = None
-        masks = None
+    def get_exposed_image_batch(self, id, file_name, indexes, normalizer=None, local_files=None):
+        loaded_images = None
+        loaded_masks = None
         if local_files:
             # If a local_files string is provided, attempt to load the images.
             try:
@@ -866,10 +834,8 @@ class AIHubExposeProjectImageBatch:
         if not loaded_images:
             raise ValueError(f"Error: {id} no valid images found")
 
-        image_batch = np.stack(loaded_images)
-        masks = np.stack(loaded_masks) if loaded_masks else None
-
-        return (image_batch, masks)
+        normalizer = normalizer if normalizer is not None else Normalizer(0, 0, "nearest-exact")
+        return normalizer.normalize(loaded_images, loaded_masks)
 
 class AIHubExposeModel:
     """
@@ -1035,13 +1001,14 @@ class AIHubExposeProjectText:
             "required": {
                 "id": ("STRING", {"default": "exposed_text", "tooltip": "A unique custom id for this workflow."}),
                 "file_name": ("STRING", {"default": "text.txt", "tooltip": "The name of the text file as stored in the project files, including extension"}),
+                "batch_index": ("STRING", {"default": "", "tooltip": "If the file belongs to a batch, the index of the latent to load, it must be a single integer"}),
             },
             "hidden": {
                 "local_file": ("STRING", {"default": "", "tooltip": "A local file to load the text from, if given this will be used instead of loading from file"}),
             }
         }
 
-    def get_exposed_text(self, id, file_name, local_file=None):
+    def get_exposed_text(self, id, file_name, batch_index, local_file=None):
         text = None
         if local_file is not None and local_file.strip() != "":
             if (os.path.exists(local_file)):
@@ -1074,13 +1041,14 @@ class AIHubExposeProjectVideo:
             "required": {
                 "id": ("STRING", {"default": "exposed_video", "tooltip": "A unique custom id for this workflow."}),
                 "file_name": ("STRING", {"default": "video.mp4", "tooltip": "The name of the video file as stored in the project files, including extension"}),
+                "batch_index": ("STRING", {"default": "", "tooltip": "If the file belongs to a batch, the index of the latent to load, it must be a single integer"}),
             },
             "hidden": {
                 "local_file": ("STRING", {"default": "", "tooltip": "A local file to load the video from, if given this will be used instead of loading from file"}),
             }
         }
 
-    def get_exposed_video(self, id, file_name, local_file=None):
+    def get_exposed_video(self, id, file_name, batch_index, local_file=None):
         video_file = None
         if local_file is not None and local_file.strip() != "":
             if (os.path.exists(local_file)):
@@ -1150,13 +1118,14 @@ class AIHubExposeProjectAudio:
             "required": {
                 "id": ("STRING", {"default": "exposed_audio", "tooltip": "A unique custom id for this workflow."}),
                 "file_name": ("STRING", {"default": "audio.mp3", "tooltip": "The name of the audio file as stored in the project files, including extension"}),
+                "batch_index": ("STRING", {"default": "", "tooltip": "If the file belongs to a batch, the index of the latent to load, it must be a single integer"}),
             },
             "hidden": {
                 "local_file": ("STRING", {"default": "", "tooltip": "A local file to load the audio from, if given this will be used instead of loading from file"}),
             }
         }
 
-    def get_exposed_audio(self, id, file_name, local_file=None):
+    def get_exposed_audio(self, id, file_name, batch_index, local_file=None):
         audio = None
         if local_file is not None and local_file.strip() != "":
             if (os.path.exists(local_file)):
@@ -1224,13 +1193,14 @@ class AIHubExposeProjectLatent:
             "required": {
                 "id": ("STRING", {"default": "exposed_latent", "tooltip": "A unique custom id for this workflow."}),
                 "file_name": ("STRING", {"default": "latent.safetensors", "tooltip": "The name of the latent file as stored in the project files, including extension"}),
+                "batch_index": ("STRING", {"default": "", "tooltip": "If the file belongs to a batch, the index of the latent to load, it must be a single integer"}),
             },
             "hidden": {
                 "local_file": ("STRING", {"default": "", "tooltip": "A local file to load the latent from, if given this will be used instead of loading from file"}),
             }
         }
     
-    def get_exposed_latent(self, id, file_name, local_file=None):
+    def get_exposed_latent(self, id, file_name, batch_index, local_file=None):
         samples = None
         if local_file is not None and local_file.strip() != "":
             if (os.path.exists(local_file)):
@@ -1245,8 +1215,6 @@ class AIHubExposeProjectLatent:
         else:
             raise ValueError("You must specify the local_file of the latent for this node to function")
         return (samples,)
-    
-# TODO AIHubExposeProjectFiles
 
 ## Actions
 class AIHubActionNewImage:
@@ -2363,8 +2331,120 @@ class AIHubUtilsMetadataMap:
 
         result = separator.join(values)
         return (result,)
+
+class Normalizer:
+    def __init__(self, normalize_at_width=0, normalize_at_height=0, normalize_upscale_method="nearest-exact"):
+        self.normalize_at_width = normalize_at_width
+        self.normalize_at_height = normalize_at_height
+        self.normalize_upscale_method = normalize_upscale_method
+
+    def normalize(self, images, masks, is_tensor=False):
+        normalize_width = self.normalize_at_width
+        normalize_height = self.normalize_at_height
+        normalize_megapixels = (normalize_width * normalize_height) / 1_000_000
+
+        if is_tensor:
+            # Convert images and masks to list of tensors
+            images = [img for img in images]
+            if masks is not None:
+                masks = [mask for mask in masks]
+
+            if normalize_width == 0 or normalize_height == 0:
+                raise ValueError("Error: When using tensor images, both normalize_at_width and normalize_at_height must be greater than 0")
+        elif normalize_width == 0 and normalize_height == 0:
+            for i in range(len(images)):
+                img = images[i]
+                _, h, w, _ = img.shape
+                image_megapixels = (w * h) / 1_000_000
+                if image_megapixels > normalize_megapixels:
+                    normalize_width = w
+                    normalize_height = h
+                    break
+
+        width = normalize_width
+        height = normalize_height
+
+        for i in range(len(images)):
+            img = images[i]
+            mask = None if masks is None else masks[i]
+            _, h, w, _ = img.shape
+                    
+            if w != normalize_width or h != normalize_height:
+                samples = img.movedim(-1, 1)  # NHWC -> NCHW
+                samples = common_upscale(
+                    samples, normalize_width, normalize_height, self.normalize_upscale_method, crop="center"
+                )
+                images[i] = samples.movedim(1, -1)  # NCHW -> NHWC
+                if mask is not None:
+                    mask = interpolate(mask.reshape((-1, 1, mask.shape[-2], mask.shape[-1])), size=(height, width), mode='bilinear', align_corners=True)
+                    crop_x = (normalize_width - w) // 2
+                    crop_y = (normalize_height - h) // 2
+                    mask = mask[:, :, crop_y:crop_y+normalize_height, crop_x:crop_x+normalize_width]
+                    masks[i] = mask
+
+        # Concatenate all the images into a single batch tensor.
+        image_batch = torch.cat(images, dim=0)
+        masks_batch = None if masks is None else torch.cat(masks, dim=0)
+
+        return (image_batch, masks_batch, width, height)
+
+class AIHubUtilsNewNormalizer:
+    """
+    A utility node for creating a normalizer to normalize images in expose nodes
+    """
+    CATEGORY = "aihub/utils"
+    FUNCTION = "new_normalizer"
+    RETURN_TYPES = ("AIHUB_NORMALIZER",)
+    RETURN_NAMES = ("NORMALIZER",)
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "normalize_at_width": ("INT", {"default": 0, "tooltip": "If greater than 0, it will resize all images to this width, requiring normalize_at_height to be set, by default normalization is otherwise done at the image with most megapixels"}),
+                "normalize_at_height": ("INT", {"default": 0, "tooltip": "If greater than 0, it will resize all images to this height, requiring normalize_at_width to be set, by default normalization is otherwise done at the image with most megapixels"}),
+                "normalize_upscale_method": (["nearest-exact", "bilinear", "area", "bicubic", "lanczos"], {"default": "nearest-exact", "tooltip": "The method to use when upscaling images"}),
+            }
+        }
     
-# TODO AIHubUtilsFileToAudio, AIHubUtilsFileToVideo, AIHubUtilsFileToText, AIHubUtilsFileToLatent
+    def new_normalizer(self, normalize_at_width, normalize_at_height, normalize_upscale_method):
+        if ((normalize_at_width == 0) or (normalize_at_height == 0)) and ((normalize_at_width != 0) or (normalize_at_height != 0)):
+            raise ValueError("Error: Both normalize_at_width and normalize_at_height must be set to values greater than 0, or both must be set to 0 to disable fixed size normalization")
+        
+        normalizer = Normalizer(normalize_at_width, normalize_at_height, normalize_upscale_method)
+        return (normalizer,)
+    
+class AIHubUtilsScaleImageAndMasks:
+    """
+    A utility node for running a normalizer to scale images and masks
+    """
+    CATEGORY = "aihub/utils"
+    FUNCTION = "run_normalizer"
+    RETURN_TYPES = ("IMAGE", "MASK", "INT", "INT",)
+    RETURN_NAMES = ("IMAGE", "MASK", "WIDTH", "HEIGHT",)
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "images": ("IMAGE", {"tooltip": "The list of images to normalize"}),
+                "normalize_at_width": ("INT", {"default": 0, "tooltip": "Must be greater than 0"}),
+                "normalize_at_height": ("INT", {"default": 0, "tooltip": "Must be greater than 0"}),
+                "normalize_upscale_method": (["nearest-exact", "bilinear", "area", "bicubic", "lanczos"], {"default": "nearest-exact", "tooltip": "The method to use when upscaling images"}),
+            },
+            "optional": {
+                "masks": ("MASK", {"optional": True, "tooltip": "The list of masks to normalize, if given must match the number of images"}),
+            }
+        }
+    
+    def run_normalizer(self, images, normalize_at_width, normalize_at_height, normalize_upscale_method, masks=None):
+        if masks is None:
+            pass
+        elif len(masks) != len(images):
+            raise ValueError("Error: The number of masks must match the number of images")
+        
+        normalizer = Normalizer(normalize_at_width, normalize_at_height, normalize_upscale_method)
+        return normalizer.normalize(images, masks, is_tensor=True)
     
 # === META NODES ===
 

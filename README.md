@@ -144,8 +144,6 @@ Expose values for the workflow, should work within any context
 
 The integer expose provides a single integer
 
-![AIHubExposeInteger](images/AIHubExposeInteger.png)
-
  - id: Represents the id of the field which should be unique among all other fields in the same workflow
  - label: A human readable label to show to the user
  - tooltip: A tooltip about this and what it represents
@@ -159,8 +157,6 @@ The integer expose provides a single integer
 #### AIHub Expose Float
 
 The float expose provides a single floating point number
-
-![AIHubExposeFloat](images/AIHubExposeFloat.png)
 
  - id: Represents the id of the field which should be unique among all other fields in the same workflow
  - label: A human readable label to show to the user
@@ -177,8 +173,6 @@ The float expose provides a single floating point number
 
 The boolean expose provides a single boolean value
 
-![AIHubExposeBoolean](images/AIHubExposeBoolean.png)
-
  - id: Represents the id of the field which should be unique among all other fields in the same workflow
  - label: A human readable label to show to the user
  - tooltip: A tooltip about this and what it represents
@@ -189,8 +183,6 @@ The boolean expose provides a single boolean value
 #### AIHub Expose String
 
 The string expose provides a single string value
-
-![AIHubExposeString](images/AIHubExposeString.png)
 
  - id: Represents the id of the field which should be unique among all other fields in the same workflow
  - label: A human readable label to show to the user
@@ -206,8 +198,6 @@ The string expose provides a single string value
 
 You must have seeds exposed to the client as outside of ComfyUI WebUI the random numbers are not generated, ensure randomness of numbers by using this seed generator, it is the client responsability to provide a seed
 
-![AIHubExposeSeed](images/AIHubExposeSeed.png)
-
  - id: Represents the id of the field which should be unique among all other fields in the same workflow
  - label: A human readable label to show to the user
  - tooltip: A tooltip about this and what it represents
@@ -218,8 +208,6 @@ You must have seeds exposed to the client as outside of ComfyUI WebUI the random
 #### AIHub Expose Steps
 
 A steps is a simple integer greater than zero, however the main reason it has its separate expose is because it is affected by model default values, unless marked as unaffected
-
-![AIHubExposeSteps](images/AIHubExposeSteps.png)
 
  - id: Represents the id of the field which should be unique among all other fields in the same workflow
  - label: A human readable label to show to the user
@@ -233,8 +221,6 @@ A steps is a simple integer greater than zero, however the main reason it has it
 
 The cfg is a simple floating point value greater than zero, however the main reason it has its separate expose is because it is affected by model default values, unless marked as unaffected
 
-![AIHubExposeCfg](images/AIHubExposeCfg.png)
-
  - id: Represents the id of the field which should be unique among all other fields in the same workflow
  - label: A human readable label to show to the user
  - tooltip: A tooltip about this and what it represents
@@ -246,8 +232,6 @@ The cfg is a simple floating point value greater than zero, however the main rea
 #### AIHub Expose Sampler
 
 The sampler is used for model sampling, technically a string; differences on how the different nodes treat SAMPLER values can cause issues within WebUI but not during actual execution.
-
-![AIHubExposeSampler](images/AIHubExposeSampler.png)
 
  - id: Represents the id of the field which should be unique among all other fields in the same workflow
  - label: A human readable label to show to the user
@@ -261,8 +245,6 @@ The sampler is used for model sampling, technically a string; differences on how
 
 The scheduler is used for model scheduling, technically a string; differences on how the different nodes treat SCHEDULER values can cause issues within WebUI but not during actual execution.
 
-![AIHubExposeScheduler](images/AIHubExposeScheduler.png)
-
  - id: Represents the id of the field which should be unique among all other fields in the same workflow
  - label: A human readable label to show to the user
  - tooltip: A tooltip about this and what it represents
@@ -274,8 +256,6 @@ The scheduler is used for model scheduling, technically a string; differences on
 #### AIHub Expose Image
 
 One of the cores of AIHub is the ability to expose images from software that has been integrated, exposing an image using the default method means the image is queried from the working directory; the following options are available as inputs:
-
-![AIHubExposeImage](images/AIHubExposeImage.png)
 
  - id: Represents the id of the field which should be unique among all other fields in the same workflow
  - label: A human readable label to show to the user
@@ -307,13 +287,13 @@ Image Types:
 
 NOTE: if you only need the information of a given image you can use the (Info Only) node, the options are exactly the same but provides the information only and not the image pixel data
 
-![AIHubExposeImageInfoOnly](images/AIHubExposeImageInfoOnly.png)
+#### AIHub Expose Image (Info Only)
+
+Exactly the same as the expose image node but only provides the information
 
 #### AIHub Expose Image Batch
 
 The expose image batch allows to expose a series of images into an image batch tensor, as well as metadata alongside of it, it is one of the most complex nodes meant to be used from video generation, handling, and lora training.
-
-![AIHubExposeImageBatch](images/AIHubExposeImageBatch.png)
 
  - id: Represents the id of the field which should be unique among all other fields in the same workflow
  - label: A human readable label to show to the user
@@ -323,6 +303,7 @@ The expose image batch allows to expose a series of images into an image batch t
  - maxlen: the maximum length of the batch
  - index: Normally it is at the discretion of the client to figure how to sort the fields, use this to specify a specific ordering
  - metadata_fields: image batch can have extra metadata appended to it, the purpose is to specify extra details for example when specifying frame numbers or prompts for the specific images that are given, there is a specific way to how to specify each metadata field, following
+ - normalizer: Specify a normalizer to normalize the images in the batch, refer to `AIHubUtilsNewNormalizer`
 
 [field_id] [TYPE] [MODIFIERS...]; [label]
 
@@ -337,8 +318,6 @@ The values for the metadata will be provided as a json object in the metadata ou
 #### AIHub Expose Audio
 
 The expose audio node allows for exposing audio from audio samplers or just as an uploaded file
-
-![AIHubExposeAudio](images/AIHubExposeAudio.png)
 
  - id: Represents the id of the field which should be unique among all other fields in the same workflow
  - label: A human readable label to show to the user
@@ -356,8 +335,6 @@ Audio Types:
 
 The expose video node allows for exposing a video from video editors or just as an uploaded file
 
-![AIHubExposeVideo](images/AIHubExposeVideo.png)
-
  - id: Represents the id of the field which should be unique among all other fields in the same workflow
  - label: A human readable label to show to the user
  - tooltip: A tooltip about this and what it represents
@@ -373,8 +350,6 @@ Video Types:
 #### AIHub Expose Model
 
 Allows for the client to select a model as well as apply any applicable loras (provided it is allowed)
-
-![AIHubExposeModel](images/AIHubExposeModel.png)
 
 Use of this selector is discouraged unless you want to specify an initial value, since it can be rather complicated to setup.
 
@@ -398,8 +373,6 @@ Use of this selector is discouraged unless you want to specify an initial value,
  - optional_clip_type: optional clip type to use with the model, applies to both clips if two have been set
 
 If you do not need any of this advanced functionality, and you just with the user to select a model, limited to a family or group, you can use the simplified version instead (the real use of the standard version is realisticaly only to select loras for a given specific model)
-
-![AIHubExposeModelSimple](images/AIHubExposeModelSimple.png)
 
 This removes the advanced options and keeps only the basics
 
@@ -456,8 +429,6 @@ Retrieves a file as text value
 
 Retrieves a file that represents an image
 
-![AIHubExposeProjectImage](images/AIHubExposeProjectImage.png)
-
  - id: Represents the id of the field which should be unique among all other fields in the same workflow
  - file_name: the filename of the given file to be read as an image file
 
@@ -470,34 +441,31 @@ Use this whenever while using an action to create an image you used append, it i
  - id: Represents the id of the field which should be unique among all other fields in the same workflow
  - file_name: Represents the file name to be loaded with the given extension
  - indexes: The indexing to retrieve, specify indexes with comma separation, use negative or positive, or specify a range
+ - normalizer: Specify a normalizer to normalize the images in the batch, refer to `AIHubUtilsNewNormalizer`
 
 #### AIHub Expose Project Audio
 
 Retrieves a file that represents audio
 
+ - id: Represents the id of the field which should be unique among all other fields in the same workflow
+ - file_name: the filename of the given file to be read as a audio file
+ - batch_index: specify an index to load a file from a batch, the index can be negative just like python indexes
+
 #### AIHub Expose Project Video
 
 Retrieves a file that represents a video that must be loaded, the expose project video function cannot load a video file and it must be done by another node
 
-![AIHubExposeProjectVideo](images/AIHubExposeProjectImage.png)
+ - id: Represents the id of the field which should be unique among all other fields in the same workflow
+ - file_name: the filename of the given file to be read as a video file
+ - batch_index: specify an index to load a file from a batch, the index can be negative just like python indexes
 
 #### AIHub Expose Project Latent
 
-Retrieves a file that represents a torch latent tensor representatio
-
-#### AIHub Expose Project File
-
-Retrieves a file, and does not process it merely getting the filename; this node works in a similar way to expose Project video where it merely gives a filepath
-
-Check out `AIHubUtilsFileToAudio` `AIHubUtilsFileToVideo` `AIHubUtilsFileToText` and `AIHubUtilsFileToLatent`
-
-#### AIHub Expose Project File Batch
-
-Retrieves a file, and does not process it merely getting the filename; however it allows for batch loading, since both Audio, Video and Latent cannot be concatenated as they are already a concatenation and that is not used anywhere within any workflow; however for the client batches of these are real and may represent a progression or selection
+Retrieves a file that represents a torch latent tensor representation
 
  - id: Represents the id of the field which should be unique among all other fields in the same workflow
- - file_name: Represents the file name to be loaded with the given extension
- - indexes: The indexing to retrieve, specify indexes with comma separation, use negative or positive, or specify a range
+ - file_name: the filename of the given file to be read as a latent file
+ - batch_index: specify an index to load a file from a batch, the index can be negative just like python indexes
 
 ### Actions
 
@@ -551,13 +519,9 @@ If an action occurs within a project that file is meant to be stored within the 
 
 #### AIHub Utils Metadata Map
 
-#### AIHub Utils File to Audio
+#### AIHub Utils New Normalizer
 
-#### AIHub Utils File to Video
-
-#### AIHub Utils File to Latent
-
-#### AIHub Utils File to Text 
+#### AIHub Utils Scale Image And Masks
 
 ### Exporting the workflow
 
