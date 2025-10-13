@@ -23,6 +23,7 @@ function uploadFileFixed(mimeType) {
 }
 
 const postExported = (json) => fetch("/aihub_workflows", { method: "POST", body: JSON.stringify(json) });
+const postExportedForLocale = (json, workflow_id, locale) => fetch(`/aihub_workflows/${workflow_id}/locale/${locale}`, { method: "POST", body: JSON.stringify(json) });
 
 function idValidator(id) {
     // workflow and expose ids must be alphanumeric or underscores, and between 3 and 50 characters
@@ -125,6 +126,23 @@ function validateWorkflow(exported) {
     return workflowId;
 }
 
+function cleanWorkflowForLocaleData(exported) {
+    // remove all nodes that are not AIHubExpose* or AIHubWorkflowController
+    const cleaned = {};
+    Object.keys(exported).forEach(nodeId => {
+        const node = exported[nodeId];
+        if (node.class_type.startsWith("AIHubExpose") || node.class_type === "AIHubWorkflowController") {
+            cleaned[nodeId] = {}
+            Object.keys(node.inputs).forEach(key => {
+                if (["description", "name", "tooltip", "label", "options_label"].includes(key)) {
+                    cleaned[nodeId][key] = node.inputs[key];
+                }
+            });
+        }
+    });
+    return cleaned;
+}
+
 app.registerExtension({
     name: "comfyui-aihub-workflow-exposer",
     nodeCreated(node) {
@@ -145,6 +163,7 @@ app.registerExtension({
                 const workflowId = validateWorkflow(exported.output);
                 if (workflowId) {
                     await postExported(exported.output);
+                    await postExportedForLocale(cleanWorkflowForLocaleData(exported.output), workflowId, "default");
                     // this is a file object
                     try {
                         const potentialImage = await uploadFileFixed("image/png");

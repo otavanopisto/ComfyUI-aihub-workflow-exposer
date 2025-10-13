@@ -6,3 +6,7 @@ AIHUB_DIR = AIHUB_DIR if AIHUB_DIR is not None else path.join(path.dirname(path.
 AIHUB_MODELS_DIR = path.join(AIHUB_DIR, "models")
 AIHUB_LORAS_DIR = path.join(AIHUB_DIR, "loras")
 AIHUB_WORKFLOWS_DIR = path.join(AIHUB_DIR, "workflows")
+
+AIHUB_MODELS_LOCALE_DIR = path.join(AIHUB_DIR, "locale", "models")
+AIHUB_LORAS_LOCALE_DIR = path.join(AIHUB_DIR, "locale", "loras")
+AIHUB_WORKFLOWS_LOCALE_DIR = path.join(AIHUB_DIR, "locale", "workflows")

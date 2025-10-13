@@ -1,6 +1,6 @@
 import io
 import os
-from .aihub_env import AIHUB_LORAS_DIR, AIHUB_MODELS_DIR, AIHUB_WORKFLOWS_DIR
+from .aihub_env import AIHUB_LORAS_DIR, AIHUB_LORAS_LOCALE_DIR, AIHUB_MODELS_DIR, AIHUB_MODELS_LOCALE_DIR, AIHUB_WORKFLOWS_DIR
 from nodes import LoadImage, CheckpointLoaderSimple, LoraLoader, UNETLoader, LoraLoaderModelOnly, VAELoader, CLIPLoader, DualCLIPLoader
 from folder_paths import get_filename_list
 import json
@@ -2601,6 +2601,9 @@ class AIHubMetaExportModel:
         with open(os.path.join(AIHUB_MODELS_DIR, json_filename), "w", encoding="utf-8") as f:
             json.dump(model_JSON, f, indent=4)
 
+        with open(os.path.join(AIHUB_MODELS_LOCALE_DIR, "default", json_filename), "w", encoding="utf-8") as f:
+            json.dump({"name": name, "description": description}, f, indent=4)
+
         return ()
     
 class AIHubMetaExportLora:
@@ -2675,6 +2678,9 @@ class AIHubMetaExportLora:
         json_filename = id + ".json"
         with open(os.path.join(AIHUB_LORAS_DIR, json_filename), "w", encoding="utf-8") as f:
             json.dump(lora_JSON, f, indent=4)
+
+        with open(os.path.join(AIHUB_LORAS_LOCALE_DIR, "default", json_filename), "w", encoding="utf-8") as f:
+            json.dump({"name": name, "description": description}, f, indent=4)
 
         return ()
     

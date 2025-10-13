@@ -18,7 +18,7 @@ from aiohttp import web
 from server import PromptServer
 from execution import validate_prompt
 
-from .aihub_env import AIHUB_DIR, AIHUB_MODELS_DIR, AIHUB_LORAS_DIR, AIHUB_WORKFLOWS_DIR
+from .aihub_env import AIHUB_DIR, AIHUB_LORAS_LOCALE_DIR, AIHUB_MODELS_DIR, AIHUB_LORAS_DIR, AIHUB_MODELS_LOCALE_DIR, AIHUB_WORKFLOWS_DIR, AIHUB_WORKFLOWS_LOCALE_DIR
 
 WEB_SOCKET_SERVER_PORT = 8000
 SERVER_THREAD = None
@@ -29,13 +29,13 @@ AIHUB_PERSIST_TEMPFILES = environ.get("AIHUB_PERSIST_TEMPFILES", "0") == "1"
 
 WORKFLOWS_CACHE_RAW = None
 WORKFLOWS_CACHE_VALID = None
-WORKFLOWS_AIHUB_SUMMARY = None
+WORKFLOWS_AIHUB_SUMMARY = {}
 
 LORAS_CACHE_RAW = None
-LORAS_CACHE_CLEANED = None
+LORAS_CACHE_CLEANED = {}
 
 MODELS_CACHE_RAW = None
-MODELS_CACHE_CLEANED = None
+MODELS_CACHE_CLEANED = {}
 
 AIHUB_TEMP_DIRECTORY_ENV = environ.get("AIHUB_TEMP_DIR", None)
 AIHUB_TEMP_DIRECTORY = AIHUB_TEMP_DIRECTORY_ENV if AIHUB_TEMP_DIRECTORY_ENV is not None else tempfile.gettempdir()
@@ -60,6 +60,23 @@ async def handle_workflow_add(request):
     
     # save the json data to the aihub directory
     with open(path.join(AIHUB_WORKFLOWS_DIR, f"{workflow_id}.json"), "w") as f:
+        json.dump(data, f)
+
+    return web.json_response({"status": "ok"})
+
+@PromptServer.instance.routes.post("/aihub_workflows/{workflow_id}/locale/{locale}")
+async def handle_workflow_locale_add(request):
+    # get the json data from the request
+    try:
+        data = await request.json()
+    except Exception as e:
+        return web.json_response({"error": "Invalid JSON data"}, status=400)
+    
+    workflow_id = request.match_info.get("workflow_id", None)
+    locale = request.match_info.get("locale", None)
+    
+    # save the json data to the aihub directory
+    with open(path.join(AIHUB_WORKFLOWS_LOCALE_DIR, locale, f"{workflow_id}.json"), "w") as f:
         json.dump(data, f)
 
     return web.json_response({"status": "ok"})
@@ -117,6 +134,18 @@ class AIHubServer:
         # create folder ../../aihub/models if it doesn't exist
         if not path.exists(AIHUB_MODELS_DIR):
             makedirs(AIHUB_MODELS_DIR)
+
+        # create folder ../../aihub/workflows if it doesn't exist
+        if not path.exists(AIHUB_WORKFLOWS_LOCALE_DIR):
+            makedirs(AIHUB_WORKFLOWS_LOCALE_DIR)
+
+        # create folder ../../aihub/loras if it doesn't exist
+        if not path.exists(AIHUB_LORAS_LOCALE_DIR):
+            makedirs(AIHUB_LORAS_LOCALE_DIR)
+
+        # create folder ../../aihub/models if it doesn't exist
+        if not path.exists(AIHUB_MODELS_LOCALE_DIR):
+            makedirs(AIHUB_MODELS_LOCALE_DIR)
 
         originalQueueUpdatedFn = PromptServer.instance.queue_updated
         originalSendSyncFn = PromptServer.instance.send_sync
@@ -247,31 +276,41 @@ class AIHubServer:
             return models
         return []
     
-    def retrieve_checkpoints_cleaned(self):
+    def retrieve_checkpoints_cleaned(self, locale=None):
         """
         Retrieves all checkpoints json information but only what is important for the client.
         """
 
-        if (AIHUB_COLD and MODELS_CACHE_CLEANED is not None):
-            return MODELS_CACHE_CLEANED
-        
+        locale = locale if locale is not None else "default"
+        if (AIHUB_COLD and locale in MODELS_CACHE_CLEANED):
+            return MODELS_CACHE_CLEANED[locale]
+
         raw_models = self.retrieve_checkpoints_raw()
         cleaned_models = []
 
         for model in raw_models:
+            potential_locale_file = path.join(AIHUB_MODELS_LOCALE_DIR, locale, model.get("id") + ".json")
+            locale_data = model
+            if path.exists(potential_locale_file):
+                with open(potential_locale_file, "r", encoding="utf-8") as f:
+                    try:
+                        locale_data = json.load(f)
+                    except json.JSONDecodeError:
+                        print(f"Error decoding JSON from model locale file: {potential_locale_file}")
+
             cleaned_model = {
                 "id": model.get("id", None), #required
                 "file": model.get("file", None), # required the checkpoint file or diffusion model file
                 "vae_file": model.get("vae_file", None), #optional, the vae file to use with this model
                 "clip_file": model.get("clip_file", None), #optional, the clip file to use with this model, can be a comma separated list of two clips for using a dual clip
                 "clip_type": model.get("clip_type", None), #optional, the clip type to use with this model
-                "name": model.get("name", None), # required the name of the model as will be seen by the user
+                "name": locale_data.get("name", model.get("name", None)), # required the name of the model as will be seen by the user
                 "group": model.get("group", None), # optional, a group name to group models together, can also be used to limit loras
                 "family": model.get("family", None), # required the family of the model, e.g. "stable-diffusion", "sdxl", "other" these are used to limit loras
                 "context": model.get("context", None), # required the context of the model, e.g. "image", "video", "3d", "text", "audio" these are used to limit models depending on the context
                 "is_diffusion_model": model.get("is_diffusion_model", None), # required, boolean, if true it will be loaded as a diffusion model instead of a checkpoint
                 "diffusion_model_weight_dtype": model.get("diffusion_model_weight_dtype", "default"), # optional, if is_diffusion_model is true, this can be used to specify the weight dtype to use when loading the diffusion model
-                "description": model.get("description", ""), # required, a description of the model
+                "description": locale_data.get("description", model.get("description", "")), # required, a description of the model
                 "default_cfg": model.get("default_cfg", None), # optional, the default cfg value to use with this model
                 "default_steps": model.get("default_steps", None), # optional, the default steps value to use with this model
                 "default_sampler": model.get("default_sampler", None), # optional, the default sampler to use with this model
@@ -280,7 +319,7 @@ class AIHubServer:
             cleaned_models.append(cleaned_model)
 
         if AIHUB_COLD:
-            MODELS_CACHE_CLEANED = cleaned_models
+            MODELS_CACHE_CLEANED[locale] = cleaned_models
 
         return cleaned_models
     
@@ -314,26 +353,35 @@ class AIHubServer:
 
             return loras
         return []
-    
-    def retrieve_loras_cleaned(self):
+
+    def retrieve_loras_cleaned(self, locale=None):
         """
         Retrieves all loras information but only what is important for the client.
         Basically all but the path that specifies where the lora is in the server
         """
 
-        if (AIHUB_COLD and LORAS_CACHE_CLEANED is not None):
-            return LORAS_CACHE_CLEANED
+        locale = locale if locale is not None else "default"
+        if (AIHUB_COLD and locale in LORAS_CACHE_CLEANED):
+            return LORAS_CACHE_CLEANED[locale]
         
         raw_loras = self.retrieve_loras_raw()
         cleaned_loras = []
 
         for lora in raw_loras:
+            potential_locale_file = path.join(AIHUB_LORAS_LOCALE_DIR, locale, lora.get("id") + ".json")
+            locale_data = lora
+            if path.exists(potential_locale_file):
+                with open(potential_locale_file, "r", encoding="utf-8") as f:
+                    try:
+                        locale_data = json.load(f)
+                    except json.JSONDecodeError:
+                        print(f"Error decoding JSON from model locale file: {potential_locale_file}")
             cleaned_lora = {
                 "id": lora.get("id", None), # required, the unique identifier for the lora
                 "file": lora.get("file", None), # required, the lora filename in the loras directory
-                "name": lora.get("name", None), # required, the name of the lora as will be seen by the user
+                "name": locale_data.get("name", lora.get("name", None)), # required, the name of the lora as will be seen by the user
                 "context": lora.get("context", None), #required, the context in which this lora can be used, e.g. "image", "video", "3d", "text", "audio"
-                "description": lora.get("description", ""), #required a description of the lora
+                "description": locale_data.get("description", lora.get("description", "")), #required a description of the lora
                 "default_strength": lora.get("default_strength", None), #optional, the default strength the lora will have when applied
                 "limit_to_model": lora.get("limit_to_model", None), #optional, limits to a specific model id
                 "limit_to_family": lora.get("limit_to_family", None), #required, limits to which family this lora can be applied
@@ -343,7 +391,7 @@ class AIHubServer:
             cleaned_loras.append(cleaned_lora)
 
         if AIHUB_COLD:
-            LORAS_CACHE_CLEANED = cleaned_loras
+            LORAS_CACHE_CLEANED[locale] = cleaned_loras
 
         return cleaned_loras
     
@@ -413,7 +461,7 @@ class AIHubServer:
 
         return valid_workflows
     
-    def retrieve_valid_workflow_aihub_summary_from(self, workflow):
+    def retrieve_valid_workflow_aihub_summary_from(self, workflow, locale=None):
         """
         Retrieves the aihub summary for a specific workflow.
         This is used to provide the client with the basic information
@@ -422,15 +470,42 @@ class AIHubServer:
         # we build the basic data structure for the workflow summary
         workflow_summary = {"expose":{}}
 
+        workflow_locale_patch = None
+        if locale is not None and locale != "default":
+            id = None
+            for key, node in workflow.items():
+                # check if it is a AIHubWorkflowController or AIHubExpose node
+                # those are the only nodes we care about for the summary
+                if node.get("class_type") == "AIHubWorkflowController":
+                    id = node.get("inputs", {}).get("id", None)
+                    break
+
+            potential_locale_file = path.join(AIHUB_WORKFLOWS_LOCALE_DIR, locale, id + ".json")
+            if path.exists(potential_locale_file):
+                with open(potential_locale_file, "r", encoding="utf-8") as f:
+                    try:
+                        workflow_locale_patch = json.load(f)
+                    except json.JSONDecodeError:
+                        print(f"Error decoding JSON from workflow locale file: {potential_locale_file}")
+
         # we will iterate through the nodes to find the AIHubWorkflowController node
         # and the AIHubExpose nodes, and extract their parameters
-        for key, node in workflow.items():
+        for nodeId, node in workflow.items():
 
             # check if it is a AIHubWorkflowController or AIHubExpose node
             # those are the only nodes we care about for the summary
             if node.get("class_type") == "AIHubWorkflowController" or node.get("class_type", "").startswith("AIHubExpose"):
                 # the basic data structure for the node summary
                 data = node.get("inputs", {})
+                data_patch = {}
+                if workflow_locale_patch is not None:
+                    # make a shallow copy of data which is a dictionary
+                    data = data.copy()
+                    # apply the locale patch to the data
+                    data_patch = workflow_locale_patch.get(nodeId, {})
+                    for key, value in data_patch.items():
+                        if key in ["description", "name", "tooltip", "label", "options_label"]:
+                            data[key] = value
 
                 # if it is a controller node, we copy all the data to the workflow summary
                 if node.get("class_type") == "AIHubWorkflowController":
@@ -451,7 +526,7 @@ class AIHubServer:
 
         return workflow_summary
     
-    def retrieve_valid_workflows_aihub_summary(self):
+    def retrieve_valid_workflows_aihub_summary(self, locale=None):
         """
         The aihub summary is what is sent to the client when they request the workflows list.
         It contains the basic information for the client to use the workflow without sending
@@ -464,15 +539,17 @@ class AIHubServer:
         # contain only the nodes that start with AIHubExpose and the value of the parameters
         # as key value pairs
 
-        if (AIHUB_COLD and WORKFLOWS_AIHUB_SUMMARY is not None):
-            return WORKFLOWS_AIHUB_SUMMARY
+        original_locale = locale
+        locale = locale if locale is not None else "default"
+        if (AIHUB_COLD and locale in WORKFLOWS_AIHUB_SUMMARY):
+            return WORKFLOWS_AIHUB_SUMMARY[locale]
         
         valid_workflows = self.retrieve_valid_workflows()
         aihub_summaries = {}
 
         for workflow in valid_workflows:
             # we build the basic data structure for the workflow summary
-            workflow_summary = self.retrieve_valid_workflow_aihub_summary_from(workflow)
+            workflow_summary = self.retrieve_valid_workflow_aihub_summary_from(workflow, locale=original_locale)
 
             # get the workflow id
             workflow_id = workflow_summary.get("id")
@@ -485,7 +562,7 @@ class AIHubServer:
             aihub_summaries[workflow_id] = workflow_summary
 
         if AIHUB_COLD:
-            WORKFLOWS_AIHUB_SUMMARY = aihub_summaries
+            WORKFLOWS_AIHUB_SUMMARY[locale] = aihub_summaries
                     
         return aihub_summaries
     
@@ -509,19 +586,6 @@ class AIHubServer:
                         return workflow
 
         return None
-    
-    def retrieve_workflow_summary_by_id(self, workflow_id):
-        """
-        For a given workflow id, retrieves the workflow summary data.
-        This is used when a client requests to run a specific workflow
-        """
-        aihub_summaries = None
-        if AIHUB_COLD and WORKFLOWS_AIHUB_SUMMARY is not None:
-            aihub_summaries = WORKFLOWS_AIHUB_SUMMARY
-        else:
-            aihub_summaries = self.retrieve_valid_workflows_aihub_summary()
-        
-        return aihub_summaries.get(workflow_id, None)
     
     def validate_and_process_workflow_request(self, socket_file_dir, request):
         """
@@ -654,6 +718,8 @@ class AIHubServer:
         print(f"New WebSocket connection")
         PREVIOUS_UPLOAD_HEADER = None
 
+        locale = request.headers.get("Accept-Language", None)
+
         try:
 
             # TODO validation
@@ -661,9 +727,9 @@ class AIHubServer:
 
             await ws.send_json({
                 'type': 'INFO_LIST',
-                'workflows': self.retrieve_valid_workflows_aihub_summary(),
-                'models': self.retrieve_checkpoints_cleaned(),
-                'loras': self.retrieve_loras_cleaned(),
+                'workflows': self.retrieve_valid_workflows_aihub_summary(locale=locale),
+                'models': self.retrieve_checkpoints_cleaned(locale=locale),
+                'loras': self.retrieve_loras_cleaned(locale=locale),
                 'samplers': comfy.samplers.KSampler.SAMPLERS,
                 'schedulers': comfy.samplers.KSampler.SCHEDULERS
             })
