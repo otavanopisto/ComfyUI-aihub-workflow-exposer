@@ -1384,6 +1384,8 @@ class AIHubActionNewLayer:
                 "reference_layer_id": ("STRING", {"default": "", "tooltip": "The Layer ID regarding the position of the image, the meta-values __first__ and __last__ can be used to refer to the first and last layer respectively"}),
                 "reference_layer_action": (["REPLACE", "NEW_BEFORE", "NEW_AFTER"], {"default": "NEW_AFTER", "tooltip": "Specify the action to execute at the given layer id"}),
                 "name": ("STRING", {"default": "new layer", "tooltip": "The name of the layer this is used for the layer list in the UI"}),
+                "action": (["APPEND", "REPLACE"], {"default": "REPLACE", "tooltip": "This refers to the file system level action, if append is selected, if the image exist it will be added a number" +
+                                                   " to the name to make it unique, if replace is selected, the image will be replaced with the new one; since layers are supposed to be integrated in the project REPLACE is often best"}),
             },
             "optional": {
                 "mask": ("MASK",),
@@ -1391,7 +1393,7 @@ class AIHubActionNewLayer:
             }
         }
 
-    def run_action(self, image, pos_x, pos_y, reference_layer_id, reference_layer_action, name, mask=None, file_name=""):
+    def run_action(self, image, pos_x, pos_y, reference_layer_id, reference_layer_action, name, action="REPLACE", mask=None, file_name=""):
         if not file_name:
             file_name = name
             if not file_name.lower().endswith(".png"):
@@ -1427,6 +1429,7 @@ class AIHubActionNewLayer:
                 "reference_layer_action": reference_layer_action,
                 "name": name,
                 "file_name": file_name,
+                "file_action": action,
             },
         )
 
@@ -1686,6 +1689,7 @@ class AIHubActionNewAudioSegment:
         return {
             "required": {
                 "audio": ("AUDIO", ),
+                "action": (["REPLACE", "APPEND"], {"default": "APPEND", "tooltip": "If append is selected, the audio will be added a number to the name to make it unique, if replace is selected, the audio will be replaced with the new one"}),
                 "name": ("STRING", {"default": "new audio", "tooltip": "The name of the audio to be used"}),
                 "reference_segment_id": ("STRING", {"default": "", "tooltip": "The reference segment id of the audio layer"}),
                 "reference_segment_action": (["REPLACE", "NEW_BEFORE", "NEW_AFTER", "MERGE"], {"default": "NEW_AFTER", "tooltip": "Specify the action to execute at the given segment id"}),
@@ -1741,10 +1745,9 @@ class AIHubActionNewVideo:
                 "mime_type": ("STRING", {"default": "video/mp4", "tooltip": "The mime type of the video"}),
                 "action": (["REPLACE", "APPEND"], {"default": "APPEND", "tooltip": "If append is selected, the video will be added a number to the name to make it unique, if replace is selected, the video will be replaced with the new one"}),
                 "name": ("STRING", {"default": "new video", "tooltip": "The name of the video to be used"}),
-                "extension": ("STRING", {"default": "mp4", "tooltip": "The extension of the video file"}),
             },
             "optional": {
-                "file_name": ("STRING", {"default": "", "tooltip": "The filename to use, with the extension, if not given the name value will be used with the given format extension"}),
+                "file_name": ("STRING", {"default": "", "tooltip": "The filename to use, with the extension, if not given the name value will be used with the given format extension based on the mime type"}),
             }
         }
     
@@ -1753,12 +1756,14 @@ class AIHubActionNewVideo:
     RETURN_TYPES = ()
     FUNCTION = "run_action"
 
-    def run_action(self, input_file, mime_type, action, name, extension="mp4", file_name=""):
+    def run_action(self, input_file, mime_type, action, name, file_name=""):
         if not os.path.exists(input_file):
             raise ValueError(f"Error: Video file not found: {input_file}")
         
         if not file_name:
             file_name = name
+            mime_type_splitted = mime_type.split("/")
+            extension = mime_type_splitted[1] if len(mime_type_splitted) > 1 else "mp4"
             if not file_name.lower().endswith(f".{extension}"):
                 file_name += f".{extension}"
             # replace spaces with underscores
@@ -1793,10 +1798,9 @@ class AIHubActionNewVideoSegment:
                 "name": ("STRING", {"default": "new video", "tooltip": "The name of the video to be used"}),
                 "reference_segment_id": ("STRING", {"default": "", "tooltip": "The reference segment id of the video layer"}),
                 "reference_segment_action": (["REPLACE", "NEW_BEFORE", "NEW_AFTER"], {"default": "NEW_AFTER", "tooltip": "Specify the action to execute at the given segment id"}),
-                "extension": ("STRING", {"default": "mp4", "tooltip": "The extension of the video file"}),
             },
             "optional": {
-                "file_name": ("STRING", {"default": "", "tooltip": "The filename to use, with the extension, if not given the name value will be used with the given format extension"}),
+                "file_name": ("STRING", {"default": "", "tooltip": "The filename to use, with the extension, if not given the name value will be used with the given format extension based on the mime type"}),
             }
         }
     
@@ -1805,11 +1809,13 @@ class AIHubActionNewVideoSegment:
     RETURN_TYPES = ()
     FUNCTION = "run_action"
 
-    def run_action(self, input_file, mime_type, name, reference_segment_id, reference_segment_action, extension="mp4", file_name=""):
+    def run_action(self, input_file, mime_type, name, reference_segment_id, reference_segment_action, file_name=""):
         if not os.path.exists(input_file):
             raise ValueError(f"Error: Video file not found: {input_file}")
 
         if not file_name:
+            mime_type_splitted = mime_type.split("/")
+            extension = mime_type_splitted[1] if len(mime_type_splitted) > 1 else "mp4"
             file_name = name
             if not file_name.lower().endswith(f".{extension}"):
                 file_name += f".{extension}"
@@ -1845,10 +1851,9 @@ class AIHubActionNewText:
                 "action": (["REPLACE", "APPEND"], {"default": "APPEND", "tooltip": "If append is selected, the text will be added a number to the name to make it unique, if replace is selected, the text will be replaced with the new one"}),
                 "name": ("STRING", {"default": "new text", "tooltip": "The name of the text to be used"}),
                 "mime_type": ("STRING", {"default": "text/plain", "tooltip": "The mime type of the text"}),
-                "extension": ("STRING", {"default": "txt", "tooltip": "The extension of the text file"}),
             },
             "optional": {
-                "file_name": ("STRING", {"default": "", "tooltip": "The filename to use, with the extension, if not given the name value will be used with the given format extension"}),
+                "file_name": ("STRING", {"default": "", "tooltip": "The filename to use, with the extension, if not given the name value will be used with the given format extension based on the mime type"}),
             }
         }
     
@@ -1857,9 +1862,18 @@ class AIHubActionNewText:
     RETURN_TYPES = ()
     FUNCTION = "run_action"
 
-    def run_action(self, text, action, name, mime_type="text/plain", extension="txt", file_name=""):
+    def run_action(self, text, action, name, mime_type="text/plain", file_name=""):
         if not file_name:
             file_name = name
+            mime_type_splitted = mime_type.split("/")
+            extension = mime_type_splitted[1] if len(mime_type_splitted) > 1 else "txt"
+
+            # special cases for known mime types where the second part is not the extension
+            if mime_type == "text/markdown":
+                extension = "md"
+            elif mime_type == "text/plain":
+                extension = "txt"
+
             if not file_name.lower().endswith(f".{extension}"):
                 file_name += f".{extension}"
             # replace spaces with underscores

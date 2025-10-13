@@ -475,53 +475,230 @@ If an action occurs within a project that file is meant to be stored within the 
 
 #### AIHub Action New Text
 
+Provides a new text file to the client
+
+ - text: the text that such file contains
+ - action: The file action to execute, `APPEND` will create a text file batch, while `REPLACE` will replace a single existing file or create it if it doesn't exist
+ - name: the name of the new file
+ - mime_type: the mime type of the file
+ - file_name: use this filename with the extension included for the actual filename of the file as it will be stored, (optional)
+
 #### AIHub Action New Image
+
+Provides a new image to the client
+
+ - image: the image to export
+ - action: The file action to execute, `APPEND` will create a text file batch, while `REPLACE` will replace a single existing file or create it if it doesn't exist
+ - name: the name of the new file
+ - file_name: use this filename with the extension included for the actual filename of the file as it will be stored, it must be png (optional)
+ - mask: use this to provide a mask for the image giving it an alpha channel (optional)
 
 #### AIHub Action New Layer
 
+Provides a new image layer to the client
+
+ - image: the image to export
+ - pos_x: the position x of the new layer in the canvas
+ - pos_y: the position y of the new layer in the canvas
+ - reference_layer_id: the id of the reference layer to insert the layer at
+ - reference_layer_action: The action to use to insert that layer at, available actions are `REPLACE`, `NEW_BEFORE` and `NEW_AFTER`
+ - name: the name of the new layer
+ - action: The file action to execute, `APPEND` will create a text file batch, while `REPLACE` will replace a single existing file or create it if it doesn't exist, this is a filesystem level action, since Layers are supposed to be integrated within the project, REPLACE is often the right option here as the client may decide to delete the file it used later
+ - file_name: use this filename with the extension included for the actual filename of the file as it will be stored, it must be png (optional)
+ - mask: use this to provide a mask for the image giving it an alpha channel (optional)
+
 #### AIHub Action New Image Batch
+
+Provides new images to the client
+
+This is achieved by calling Action New Image many times in APPEND mode, so it is equivalent to a loop in there.
+
+ - images: the images to export as batch in the given order
+ - masks: optional masks for the images to give them an alpha channel
+ - name: name of the image batch
+ - file_name: file name for the image batch, a number will be added, just specify a simple file name the client will handle the batching on multiple files
+ - action: `APPEND` or `REPLACE`, if append is used, the batch will concatenate to an existing batch, if replace is used the batch will replace an existing batch.
 
 #### AIHub Action New Audio
 
+Provides new audio to the client
+
+ - audio: the audio to be provided to the client
+ - action: The file action to execute, `APPEND` will create a text file batch, while `REPLACE` will replace a single existing file or create it if it doesn't exist
+ - name: the name of the audio file
+ - format: the format to be exported at
+ - file_name: an optional filename with the given extension
+
 #### AIHub Action New Audio Segment
+
+Provides new audio segment to the client
+
+ - audio: the audio to be provided to the client
+ - action: The file action to execute, `APPEND` will create a text file batch, while `REPLACE` will replace a single existing file or create it if it doesn't exist
+ - reference_segment_id: the segment id to have as a reference for inserting this segment
+ - reference_segment_action: the action to execute over that segment, `NEW_AFTER`, `NEW_BEFORE`, `MERGE` and `REPLACE`
+ - name: the name of the audio file
+ - format: the format to be exported at
+ - file_name: an optional filename with the given extension
 
 #### AIHub Action New Video
 
+Provides new video to the client
+
+ - input_file: since there is no video format in comfy, provide the input filepath that it can load
+ - action: The file action to execute, `APPEND` will create a text file batch, while `REPLACE` will replace a single existing file or create it if it doesn't exist
+ - name: the name of the new file
+ - mime_type: the mime type of the file
+ - file_name: use this filename with the extension included for the actual filename of the file as it will be stored, (optional)
+
 #### AIHub Action New Video Segment
+
+Provides new video segment to the client
+
+ - input_file: since there is no video format in comfy, provide the input filepath that it can load
+ - action: The file action to execute, `APPEND` will create a text file batch, while `REPLACE` will replace a single existing file or create it if it doesn't exist
+ - reference_segment_id: the segment id to have as a reference for inserting this segment
+ - reference_segment_action: the action to execute over that segment, `NEW_AFTER`, `NEW_BEFORE` and `REPLACE`
+ - name: the name of the new file
+ - mime_type: the mime type of the file
+ - file_name: use this filename with the extension included for the actual filename of the file as it will be stored, (optional)
 
 #### AIHub Action Set Project Config Boolean
 
+Sets the configuration boolean of a given project at its project config file
+
+ - field: the filed id, use dots for entering sublevels
+ - value: the value to set at
+
 #### AIHub Action Set Project Config Integer
+
+Sets the configuration integer of a given project at its project config file
+
+ - field: the filed id, use dots for entering sublevels
+ - value: the value to set at
 
 #### AIHub Action Set Project Config Float
 
+Sets the configuration float of a given project at its project config file
+
+ - field: the filed id, use dots for entering sublevels
+ - value: the value to set at
+
 #### AIHub Action Set Project Config String
+
+Sets the configuration string of a given project at its project config file
+
+ - field: the filed id, use dots for entering sublevels
+ - value: the value to set at
 
 ### Utilities
 
 #### AIHub Utils Crop Merged Image To Layer Size
 
+Crops the merged image to a given layer size, provided the layer known coordinates; this is used as a fallback node for image programs that may not be capable of providing `merged_image_current_layer_intersection_without_current_layer` or `merged_image_current_layer_intersection`
+
+ - image: the merged layer image
+ - mask: the merged layer mask (optional)
+ - layer_pos_x: layer position x
+ - layer_pos_y: layer position y
+ - layer_width: layer width
+ - layer_height: layer height
+
+This will provide a new cropped merged image
+
 #### AIHub Utils Fit Layer To Merged Image
+
+Crops the current_layer to fit the merged image avoiding overflows; this is used as a fallback node for image programs that may not be capable of providing `current_layer_at_image_intersection`
+
+ - layer_image: the image of the layer
+ - layer_mask: the mask of the layer (optional)
+ - merged_image_width: the merged image width
+ - merged_image_height: the merged image height
+
+It will output a new image, mask, new position x and y, as well as new width and height; this would be equivalent to if `current_layer_at_image_intersection` was given but from the current layer.
 
 #### AIHub Utils Float To Int
 
+Takes a float value and casts it into an integer
+
 #### AIHub Utils Str To Float
 
-#### AIHub Utils Load VAE
-
-#### AIHub Utils Load Lora
-
-#### AIHub Utils Load Model
-
-#### AIHub Utils Load CLIP
+Takes a string value and casts it into a float
 
 #### AIHub Utils Str To Vector
 
+Takes a string value and casts it into a float vector of 3 values at least
+
+An example usage how to use these utils, here we make a selector that allows us to choose the resolution of our video based on landscape and portrait in a string selector
+
+![Example workflow video resolution selector](images/example_workflow_video.png)
+
+#### AIHub Utils Load VAE
+
+This is used to load a VAE, it works accross workflows and will keep the VAE in memory
+
+The reason it exists as a separate utility is that it takes a string as the input, ensuring that you can dinamically load this from stored files or exposes, or so on.
+
+#### AIHub Utils Load Lora
+
+This is used to load a Lora, it works accross workflows and will keep the Lora in memory
+
+The reason it exists as a separate utility is that it takes a string as the input, ensuring that you can dinamically load this from stored files or exposes, or so on.
+
+#### AIHub Utils Load Model
+
+This is used to load a Model, it works accross workflows and will keep the Model in memory
+
+The reason it exists as a separate utility is that it takes a string as the input, ensuring that you can dinamically load this from stored files or exposes, or so on.
+
+ - model: the model to load.
+ - is_diffusion_model: whether the model is a diffusion model and must use the UNETLoader
+ - diffusion_model_weight_dtype: the weight dtype of a diffusion model when diffusion model is true
+
+It gives everything that a checkpoint loader does however it will not give clip or vae for diffussion models
+
+#### AIHub Utils Load CLIP
+
+The reason it exists as a separate utility is that it takes a string as the input, ensuring that you can dinamically load this from stored files or exposes, or so on.
+
+This is used to load a Clip, it works accross workflows and will keep the Lora in memory
+
+ - clip_1: the first clip to load
+ - clip_2: the second clip to load (optional)
+ - type: type of the clip
+ - device: the device for the clip
+
 #### AIHub Utils Metadata Map
+
+Use this to map values from the metadata obtained from image batches into string values to be used in inputs.
+
+For example, the LTXV image sampler needs to receive the indexes of each frame as comma separated
+
+We turn it into eg. "0,48,97" 
+
+![AIHubMetadataMap](images/AIHubMetadataMap.png)
 
 #### AIHub Utils New Normalizer
 
+Creates a normalizer object that is used in image batches to normalize the images of the exposed values before they are transformed into a tensor
+
+ - normalize_at_width: the width of the normalization of images, if zero is provided here, alongside the height, the normalizer will seek for the image with most megapixels
+ - normalize_at_height: the height of the normalization of images, if zero is provided here, alongside the height, the normalizer will seek for the image with most megapixels
+ - normalize_upscale_method: the upscale method to use during normalization
+
+It provides a normalizer object as output
+
 #### AIHub Utils Scale Image And Masks
+
+It basically allows to use a normalizer to normalize image and mask, however it will only work in already existing tensors and processed images as it is for used within workflows, not preprocessing
+
+In practise this is basically just an upscaler/downscaler, just that it also works with masks; if masks are not required the simple method of using image scale by shall work best.
+
+ - images: the images to normalize
+ - masks: the masks to normalize
+ - normalize_at_width: the width of the normalization of images
+ - normalize_at_height: the height of the normalization of images
+ - normalize_upscale_method: the upscale method to use during normalization
 
 ### Exporting the workflow
 

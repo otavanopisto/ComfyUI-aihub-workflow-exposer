@@ -120,6 +120,7 @@ function validateWorkflow(exported) {
     // TODO validate AIHubExposeModel and AIHubExposeModelSimple nodes to see if the values are valid models and loras
     // TODO validate AIHubExposeImageBatch node to see if metadata fields are valid
     // TODO validate that no AIHubExpose nodes have connected values to their inputs since they must be static
+    // TODO validate file_name in actions to see if they are valid filenames (no special characters, no numbers, etc)
 
     return workflowId;
 }
