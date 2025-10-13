@@ -718,7 +718,7 @@ class AIHubServer:
         print(f"New WebSocket connection")
         PREVIOUS_UPLOAD_HEADER = None
 
-        locale = request.headers.get("Accept-Language", None)
+        locale = request.headers.get("locale", None)
 
         try:
 

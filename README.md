@@ -18,6 +18,9 @@ You need the following folders within ComfyUI directory.
 `ComfyUI/aihub/loras`
 `ComfyUI/aihub/models`
 `ComfyUI/aihub/workflows`
+`ComfyUI/aihub/locale/loras`
+`ComfyUI/aihub/locale/models`
+`ComfyUI/aihub/locale/workflows`
 
 ## Add a lora
 
@@ -116,6 +119,25 @@ NOTE: Exporting models (as well as the loras that apply to them) is only useful 
 First any workflow to be adapted requires a AIHubWorkflowController this merely specifies the id of the workflow as well as other useful data about the workflow.
 
 Secondly you need to add as many AIHubExpose nodes as you require to expose data from the client, there are many different types of AIHubExpose nodes for different usages and connect them with your workflow, there are many fields in the expose nodes and they will be explained later; note that you may find more expose nodes when using ComfyUI search functionality but not all has been implemented.
+
+## Add locales
+
+Locales are added as a folder within the specific directory of what wants to be translated, the `{id}.json` is what the file name needs to be, for example to add spanish translation to the previous model:
+
+`ComfyUI/aihub/locale/models/es/fancy_animal_model_v10.json`
+
+```json
+{
+    "name": "Modelo de Animal Fantástico",
+    "description": "Un modelo de alta calidad para generar imágenes de animales y criaturas con detalles intrincados y colores vibrantes. Ideal para arte fantástico, ilustraciones de vida silvestre y diseños de criaturas imaginativas."
+}
+```
+
+The same applies for loras.
+
+For workflows it is more complicated as these are ComfyUI valid workflows, it is recommended to use the export button within the Workflow Controller as it will create a default locale for this, which can then be changed into other locales
+
+When clients request the server with the information, they give a header over the websocket with the locale value, this is what is used for the localization, if no header is provided the information is send as it is originally defined
 
 ### AIHub Workflow Controller
 
