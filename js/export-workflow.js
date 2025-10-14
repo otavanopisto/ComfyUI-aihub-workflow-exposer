@@ -134,7 +134,7 @@ function cleanWorkflowForLocaleData(exported) {
         if (node.class_type.startsWith("AIHubExpose") || node.class_type === "AIHubWorkflowController") {
             cleaned[nodeId] = {}
             Object.keys(node.inputs).forEach(key => {
-                if (["description", "name", "tooltip", "label", "options_label"].includes(key)) {
+                if (["description", "name", "tooltip", "label", "options_label", "category"].includes(key)) {
                     cleaned[nodeId][key] = node.inputs[key];
                 }
             });

@@ -289,7 +289,11 @@ class AIHubServer:
         cleaned_models = []
 
         for model in raw_models:
-            potential_locale_file = path.join(AIHUB_MODELS_LOCALE_DIR, locale, model.get("id") + ".json")
+            id = model.get("id", "None")
+            locale = locale.lower().replace("-", "_")
+            potential_locale_file = path.join(AIHUB_MODELS_LOCALE_DIR, locale, id + ".json")
+            if "_" in locale and not path.exists(potential_locale_file):
+                potential_locale_file = path.join(AIHUB_MODELS_LOCALE_DIR, locale.split("_")[0], id + ".json")
             locale_data = model
             if path.exists(potential_locale_file):
                 with open(potential_locale_file, "r", encoding="utf-8") as f:
@@ -368,7 +372,11 @@ class AIHubServer:
         cleaned_loras = []
 
         for lora in raw_loras:
-            potential_locale_file = path.join(AIHUB_LORAS_LOCALE_DIR, locale, lora.get("id") + ".json")
+            id = lora.get("id", "None")
+            locale = locale.lower().replace("-", "_")
+            potential_locale_file = path.join(AIHUB_LORAS_LOCALE_DIR, locale, id + ".json")
+            if "_" in locale and not path.exists(potential_locale_file):
+                potential_locale_file = path.join(AIHUB_LORAS_LOCALE_DIR, locale.split("_")[0], id + ".json")
             locale_data = lora
             if path.exists(potential_locale_file):
                 with open(potential_locale_file, "r", encoding="utf-8") as f:
@@ -480,7 +488,10 @@ class AIHubServer:
                     id = node.get("inputs", {}).get("id", None)
                     break
 
+            locale = locale.lower().replace("-", "_")
             potential_locale_file = path.join(AIHUB_WORKFLOWS_LOCALE_DIR, locale, id + ".json")
+            if "_" in locale and not path.exists(potential_locale_file):
+                potential_locale_file = path.join(AIHUB_WORKFLOWS_LOCALE_DIR, locale.split("_")[0], id + ".json")
             if path.exists(potential_locale_file):
                 with open(potential_locale_file, "r", encoding="utf-8") as f:
                     try:
@@ -504,7 +515,7 @@ class AIHubServer:
                     # apply the locale patch to the data
                     data_patch = workflow_locale_patch.get(nodeId, {})
                     for key, value in data_patch.items():
-                        if key in ["description", "name", "tooltip", "label", "options_label"]:
+                        if key in ["description", "name", "tooltip", "label", "options_label", "category"]:
                             data[key] = value
 
                 # if it is a controller node, we copy all the data to the workflow summary
