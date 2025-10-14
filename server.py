@@ -76,7 +76,10 @@ async def handle_workflow_locale_add(request):
     locale = request.match_info.get("locale", None)
     
     # save the json data to the aihub directory
-    with open(path.join(AIHUB_WORKFLOWS_LOCALE_DIR, locale, f"{workflow_id}.json"), "w") as f:
+    locale_folder = path.join(AIHUB_WORKFLOWS_LOCALE_DIR, locale)
+    if not path.exists(locale_folder):
+        makedirs(locale_folder)
+    with open(path.join(locale_folder, f"{workflow_id}.json"), "w") as f:
         json.dump(data, f)
 
     return web.json_response({"status": "ok"})
