@@ -12,7 +12,7 @@ from nodes import interrupt_processing
 import comfy.samplers
 from shutil import rmtree
 import threading
-import time
+from folder_paths import get_filename_list
 
 from aiohttp import web
 from server import PromptServer
@@ -39,6 +39,8 @@ MODELS_CACHE_CLEANED = {}
 
 AIHUB_TEMP_DIRECTORY_ENV = environ.get("AIHUB_TEMP_DIR", None)
 AIHUB_TEMP_DIRECTORY = AIHUB_TEMP_DIRECTORY_ENV if AIHUB_TEMP_DIRECTORY_ENV is not None else tempfile.gettempdir()
+
+AIHUB_MAX_MESSAGE_SIZE = int(environ.get("AIHUB_MAX_MESSAGE_SIZE", 50 * 1024 * 1024))  # 50 MB
 
 @PromptServer.instance.routes.post("/aihub_workflows")
 async def handle_workflow_add(request):
@@ -103,6 +105,11 @@ async def handle_workflow_image_add(request):
         f.write(data)
 
     return web.json_response({"status": "ok"})
+
+@PromptServer.instance.routes.get("/aihub_list_models_and_loras")
+async def handle_list_models(request):
+    return web.json_response({"checkpoints": get_filename_list("checkpoints"), "diffusion_models": get_filename_list("diffusion_models"),
+                               "loras": get_filename_list("loras")})
 
 class AIHubServer:
     """
@@ -518,7 +525,7 @@ class AIHubServer:
                     # apply the locale patch to the data
                     data_patch = workflow_locale_patch.get(nodeId, {})
                     for key, value in data_patch.items():
-                        if key in ["description", "name", "tooltip", "label", "options_label", "category"]:
+                        if key in ["description", "name", "tooltip", "label", "options_label", "category", "metadata_fields_label"]:
                             data[key] = value
 
                 # if it is a controller node, we copy all the data to the workflow summary
@@ -721,7 +728,8 @@ class AIHubServer:
         """
         Handles a new WebSocket connection and messages.
         """
-        ws = web.WebSocketResponse()
+        global AIHUB_MAX_MESSAGE_SIZE
+        ws = web.WebSocketResponse(max_msg_size=AIHUB_MAX_MESSAGE_SIZE)
         await ws.prepare(request)
 
         # make a directory for this websocket connection to store files, use the Temp directory for the operating system
@@ -878,7 +886,7 @@ class AIHubServer:
                         await ws.send_json({'type': 'ERROR', 'message': 'Invalid JSON'})
                 
                 elif msg.type == web.WSMsgType.ERROR:
-                    print('WebSocket connection closed with exception')
+                    print(f'WebSocket connection closed with exception {ws.exception()}')
 
                 elif msg.type == web.WSMsgType.BINARY:
                     print('WebSocket recieved a file')

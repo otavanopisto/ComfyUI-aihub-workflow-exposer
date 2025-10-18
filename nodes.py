@@ -707,11 +707,12 @@ class AIHubExposeImageBatch:
                 "index": ("INT", {"default": 0, "tooltip": "This value is used for sorting the input fields when displaying; lower values will appear first."}),
                 "metadata_fields": ("STRING", {"default": "", "multiline": True, "tooltip": "A newline separated list of metadata fields to include in the metadata JSON for each image in the batch," +
                                                " add a space with the type next to it, if not specified it will be considered integer, valid types are: INT, FLOAT, FLOAT, STRING and BOOLEAN." +
-                                               " A second space and further allows for specifying modifiers, valid modifiers are SORTED, UNIQUE, REQUIRED, POSITIVE, NONZERO, NONEMPTY, NEGATIVE, MULTILINE. " +
+                                               " A second space and further allows for specifying modifiers, valid modifiers are SORTED, UNIQUE, NONZERO, NONEMPTY, MULTILINE. " +
+                                               " for BOOLEAN it is also possible to use ONE_TRUE and ONE_FALSE as modifiers." +
                                                " It is also possible to add numeric validity modifiers with a colon, for example MAX:100, MAXLEN:100, MIN:0 or MINLEN:0 " +
                                                " But also a property name provided that property exist in the project and is an expose integer or expose project integer " +
-                                               " Anything after a colon (:) will be considered part of the field name. " +
-                                               " For example: 'frame_number INT POSITIVE REQUIRED SORTED MAX:total_frames; Frame number\nprompt_at_frame STRING NONEMPTY MAXLEN:100; Prompt at frame'"}),
+                                               " For example: 'frame_number INT POSITIVE REQUIRED SORTED MAX:total_frames\nprompt_at_frame STRING NONEMPTY MAXLEN:100'"}),
+                "metadata_fields_label": ("STRING", {"default": "", "multiline": True, "tooltip": "A newline separated list of labels for the metadata fields to include in the metadata JSON for each image in the batch. Must match the number of metadata fields."}),
             },
             "optional": {
                 "normalizer": ("AIHUB_NORMALIZER", {"tooltip": "The method to use for normalizing the images in the batch, if not specified it will use the image with the most megapixels as the target size with a nearest-exact upscaler"}),
@@ -728,6 +729,8 @@ class AIHubExposeImageBatch:
         metadata = None
         width = 0
         height = 0
+
+        normalizer = normalizer if normalizer is not None else Normalizer(0, 0, "nearest-exact")
 
         if local_files:
             # If a local_files string is provided, attempt to load the images.
@@ -761,7 +764,6 @@ class AIHubExposeImageBatch:
                         filenameOnly = os.path.basename(filename)
                         raise ValueError(f"Error: Image file not found: {filenameOnly}")
                     
-                normalizer = normalizer if normalizer is not None else Normalizer(0, 0, "nearest-exact")
                 image_batch, masks, width, height = normalizer.normalize(loaded_images, loaded_masks)
 
                 # Concatenate all the images into a single batch tensor.

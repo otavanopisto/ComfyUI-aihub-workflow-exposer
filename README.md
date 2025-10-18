@@ -325,15 +325,15 @@ The expose image batch allows to expose a series of images into an image batch t
  - maxlen: the maximum length of the batch
  - index: Normally it is at the discretion of the client to figure how to sort the fields, use this to specify a specific ordering
  - metadata_fields: image batch can have extra metadata appended to it, the purpose is to specify extra details for example when specifying frame numbers or prompts for the specific images that are given, there is a specific way to how to specify each metadata field, following
+ - metadata_fields_label: the label for the metadata fields in the same order
  - normalizer: Specify a normalizer to normalize the images in the batch, refer to `AIHubUtilsNewNormalizer`
 
-[field_id] [TYPE] [MODIFIERS...]; [label]
+[field_id] [TYPE] [MODIFIERS...]
 
  - field_id: Can be any valid json id
  - TYPE: must be either `INT` `FLOAT` `BOOLEAN` or `STRING`
- - MODIFIERS (basic): allowed are for numeric types: `SORTED` `POSITIVE` `NEGATIVE` `NONZERO`, for numeric and string: `UNIQUE`, for string: `REQUIRED` `NONEMPTY` and `MULTILINE`
+ - MODIFIERS (basic): allowed are for numeric types: `SORTED` `NONZERO`, for numeric and string: `UNIQUE`, for string: `NONEMPTY` and `MULTILINE`, for boolean: `ONE_FALSE` and `ONE_TRUE`
  - MODIFIERS (validators): allowed are for numeric types: `MAX:(number or expose id)` `MIN:(number or expose id)` and for string `MAXLEN:(number or expose id)` `MINLEN:(number or expose id)`; example `MAX:100` or `MAX:maximum_count` where `maximum_count` is the id of another property exposed that is either an integer or a project integer that is exposed, the property must be exposed
- - label: Just a human readable label for the client
 
 The values for the metadata will be provided as a json object in the metadata output, the metadata output can be processed by `AIHub Utils Metadata Map` in order to map one single value for data input into a string; but if more complex behaviour is required, like that on creating loras from image batches, it is expected that a custom node is to be written to handle it; since node handling is not going to cut it.
 
@@ -755,3 +755,9 @@ Default `0`
 Default `(the os temporary directory)`
 
 The temporary directory to use to store the temporary files that the client created
+
+### AIHUB_MAX_MESSAGE_SIZE
+
+The max message size for the aihub websocket
+
+Defaults to 50MB
