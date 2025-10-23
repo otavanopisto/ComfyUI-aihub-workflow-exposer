@@ -93,12 +93,12 @@ function validateMetadataFieldLine(nodeInputId, line, lineNumber) {
         return false;
     }
 
-    max = null
-    min = null
-    maxlen = null
-    minlen = null
-    one_true = false
-    one_false = false
+    let max = null
+    let min = null
+    let maxlen = null
+    let minlen = null
+    let one_true = false
+    let one_false = false
     for (const modifier of modifiers) {
         const specialModifier = modifier.split(":")[0];
         if (!validModifiersForType[type].includes(modifier) && !validSpecialModifiersForType[type].includes(specialModifier)) {
@@ -172,6 +172,8 @@ function validateMetadataFieldLine(nodeInputId, line, lineNumber) {
             return false;
         }
     }
+
+    return true;
 }
 
 function validateWorkflow(exported, modelsAndLoras) {
@@ -212,7 +214,7 @@ function validateWorkflow(exported, modelsAndLoras) {
     const repeating_ids = new Set();
     Object.keys(exported).forEach(nodeId => {
         const node = exported[nodeId];
-        if (node.class_type.startsWith("AIHubExpose") && node.inputs.id && node.inputs.id.trim() !== "") {
+        if (node.class_type.startsWith("AIHubExpose") && node.inputs.id && typeof node.inputs.id === "string" && node.inputs.id.trim() !== "") {
             if (ids.has(node.inputs.id.trim())) {
                 repeating_ids.add(node.inputs.id.trim());
             }
@@ -380,7 +382,18 @@ function validateWorkflow(exported, modelsAndLoras) {
             // check that metadata_fields_label is a newline separated list of labels matching the number of metadata fields
             const metadataFieldsLabel = node.inputs.metadata_fields_label;
             const metadataFields = node.inputs.metadata_fields;
-            if (metadataFieldsLabel) {
+            if (metadataFieldsLabel || metadataFields) {
+                const allValidHere = metadataFieldsLabel.split("\n").every((v, index) => {
+                    if (!v.trim()) {
+                        const dialog = new ComfyDialog()
+                        dialog.show("Validation Error: The metadata_fields_label in node " + nodeIdValue + " has an empty metadata field label at line " + index);
+                        return false;
+                    }
+                    return true;
+                })
+                if (!allValidHere) {
+                    return false;
+                }
                 if (metadataFieldsLabel.split("\n").length !== metadataFields.split("\n").length) {
                     const dialog = new ComfyDialog()
                     dialog.show("Validation Error: The metadata_fields_label in node " + nodeIdValue + " does not match the number of metadata fields, empty lines count as labels and fields");
@@ -393,11 +406,13 @@ function validateWorkflow(exported, modelsAndLoras) {
             // validate if metadata fields are valid
             const metadataFields = node.inputs.metadata_fields;
             const lines = metadataFields.split("\n");
-            for (let i = 0; i < lines.length; i++) {
-                const line = lines[i];
-                const valid = validateMetadataFieldLine(nodeIdValue, line, i);
-                if (!valid) {
-                    return false;
+            if (metadataFields.length !== 0) {
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i];
+                    const valid = validateMetadataFieldLine(nodeIdValue, line, i);
+                    if (!valid) {
+                        return false;
+                    }
                 }
             }
         }

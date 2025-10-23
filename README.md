@@ -313,6 +313,20 @@ NOTE: if you only need the information of a given image you can use the (Info On
 
 Exactly the same as the expose image node but only provides the information
 
+#### AIHub Expose Frame
+
+Exposes a given frame for a video, meant to be used within frame by frame editors
+
+ - id: Represents the id of the field which should be unique among all other fields in the same workflow
+ - label: A human readable label to show to the user
+ - tooltip: A tooltip about this and what it represents
+ - type: the type of the image expose
+ - index: Normally it is at the discretion of the client to figure how to sort the fields, use this to specify a specific ordering
+ - frame_index_type: the type of the frame indexing, use to define absolute or relative positioning
+ - frame_index: the given index for the video, note that you may not receive this specific index as values may be clamped
+
+The output indexes of this node should always be positive and absolute, even if the given frame_index is a negative index
+
 #### AIHub Expose Image Batch
 
 The expose image batch allows to expose a series of images into an image batch tensor, as well as metadata alongside of it, it is one of the most complex nodes meant to be used from video generation, handling, and lora training.
@@ -540,6 +554,17 @@ This is achieved by calling Action New Image many times in APPEND mode, so it is
  - name: name of the image batch
  - file_name: file name for the image batch, a number will be added, just specify a simple file name the client will handle the batching on multiple files
  - action: `APPEND` or `REPLACE`, if append is used, the batch will concatenate to an existing batch, if replace is used the batch will replace an existing batch.
+
+#### AIHub Action New Frames
+
+Provides frames to the client, basically the same as an image batch action but with an extra action at the end meant to be used within a video
+
+ - images: the images to export as batch in the given order
+ - name: name of the image batch
+ - file_name: file name for the image batch, a number will be added, just specify a simple file name the client will handle the batching on multiple files
+ - action: `APPEND` or `REPLACE`, if append is used, the batch will concatenate to an existing batch, if replace is used the batch will replace an existing batch.
+ - insert_index: the number a pythonic style index (negative allowed) where to insert the given batch at
+ - insert_action: the action to do `APPEND` or `REPLACE` regarding the video
 
 #### AIHub Action New Audio
 

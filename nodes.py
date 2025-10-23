@@ -600,6 +600,57 @@ class AIHubExposeImage:
         
         return (image, mask, pos_x, pos_y, layer_id, width, height,)
     
+class AIHubExposeFrame:
+    """
+    An utility to expose a video frame to be used in the workflow
+    """
+
+    CATEGORY = "aihub/expose"
+    FUNCTION = "get_exposed_frame"
+
+    RETURN_TYPES = ("IMAGE", "INT", "INT", "INT", "INT",)
+    RETURN_NAMES = ("IMAGE", "WIDTH", "HEIGHT", "FRAME_INDEX", "TOTAL_FRAMES",)
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "id": ("STRING", {"default": "exposed_frame", "tooltip": "A unique custom ID for this workflow."}),
+                "label": ("STRING", {"default": "Frame", "tooltip": "This is the label that will appear in the field."}),
+                "tooltip": ("STRING", {"default": "", "tooltip": "An optional tooltip"}),
+                "frame_index_type": ([
+                    "relative",
+                    "absolute",
+                ], {"default": "relative", "tooltip": "The index type of the frame"}),
+                "frame_index": ("INT", {"default": 0, "tooltip": "The index of the frame to expose, it gets affected by relative or absolute type, note that if out of bounds it will clamp to the nearest valid frame"}),
+                "index": ("INT", {"default": 0, "tooltip": "This value is used for sorting the input fields when displaying; lower values will appear first."}),
+            },
+            "hidden": {
+                "frame": ("INT", {"default": 0, "tooltip": "The actual frame number in the video"}),
+                "total_frames": ("INT", {"default": 1, "tooltip": "The total number of frames in the video"}),
+                "local_file": ("STRING",),
+            },
+        }
+    
+    def get_exposed_frame(self, id, label, tooltip, frame_index_type, frame_index, index, frame=0, total_frames=1, local_file=None):
+        image = None
+        if local_file is not None:
+            if (os.path.exists(local_file)):
+                # Instantiate a LoadImage node and use its logic to load the file
+                loader = LoadImage()
+                # The load_image method returns a tuple, so we need to get the first element
+                loaded_image_tuple = loader.load_image(local_file)
+                image = loaded_image_tuple[0]
+            else:
+                filenameOnly = os.path.basename(local_file)
+                raise ValueError(f"Error: Image file not found: {filenameOnly}")
+        else:
+            raise ValueError("You must specify the local_file for this node to function")
+
+        _, height, width, _ = image.shape
+        
+        return (image, width, height, frame, total_frames,)
+    
 class AIHubExposeProjectImage:
     """
     An utility to expose an image from the project files
@@ -711,7 +762,7 @@ class AIHubExposeImageBatch:
                                                " for BOOLEAN it is also possible to use ONE_TRUE and ONE_FALSE as modifiers." +
                                                " It is also possible to add numeric validity modifiers with a colon, for example MAX:100, MAXLEN:100, MIN:0 or MINLEN:0 " +
                                                " But also a property name provided that property exist in the project and is an expose integer or expose project integer " +
-                                               " For example: 'frame_number INT POSITIVE REQUIRED SORTED MAX:total_frames\nprompt_at_frame STRING NONEMPTY MAXLEN:100'"}),
+                                               " For example: 'frame_number INT POSITIVE SORTED MAX:total_frames\nprompt_at_frame STRING NONEMPTY MULTILINE MAXLEN:100'"}),
                 "metadata_fields_label": ("STRING", {"default": "", "multiline": True, "tooltip": "A newline separated list of labels for the metadata fields to include in the metadata JSON for each image in the batch. Must match the number of metadata fields."}),
             },
             "optional": {
@@ -723,7 +774,7 @@ class AIHubExposeImageBatch:
             }
         }
 
-    def get_exposed_image_batch(self, id, label, tooltip, type, maxlen, index, metadata_fields, normalizer=None, local_files=None, metadata="[]"):
+    def get_exposed_image_batch(self, id, label, tooltip, type, minlen, maxlen, index, metadata_fields, metadata_fields_label, normalizer=None, local_files=None, metadata="[]"):
         image_batch = None
         masks = None
         metadata = None
@@ -747,7 +798,112 @@ class AIHubExposeImageBatch:
                 if len(metadata) != len(filenames):
                     raise ValueError(f"Error: {id} the number of files does not match the number of metadata entries")
 
-                ## TODO fix this to actually use the metadata fields, as well as using width and height to resize images if needed
+                metadata = json.loads(metadata)
+                if not isinstance(metadata, list):
+                    raise ValueError("Error: metadata is not a valid JSON string encoding an array")
+
+                metadata_fields_list = [line.strip() for line in metadata_fields.split("\n") if line.strip()]
+                true_booleans = []
+                false_booleans = []
+                previous_value_of_sorted_field = {}
+                for item in metadata:
+                    if not isinstance(item, dict):
+                        raise ValueError("Error: metadata items must be objects")
+                    
+                    for field_def in metadata_fields_list:
+                        field_splitted = field_def.split(" ")
+                        field_name = field_splitted[0]
+                        field_type = field_splitted[1]
+                        field_modifiers = field_splitted[2:] if len(field_splitted) > 2 else []
+
+                        if field_type not in item:
+                            raise ValueError(f"Error: metadata item is missing field '{field_def}'")
+                        elif field_type == "INT" and not isinstance(item[field_name], int):
+                            raise ValueError(f"Error: metadata field '{field_name}' is not of type INT")
+                        elif field_type == "FLOAT" and not isinstance(item[field_name], float):
+                            raise ValueError(f"Error: metadata field '{field_name}' is not of type FLOAT")
+                        elif field_type == "STRING" and not isinstance(item[field_name], str):
+                            raise ValueError(f"Error: metadata field '{field_name}' is not of type STRING")
+                        elif field_type == "BOOLEAN" and not isinstance(item[field_name], bool):
+                            raise ValueError(f"Error: metadata field '{field_name}' is not of type BOOLEAN")
+                        
+                        if "ONE_TRUE" in field_modifiers and field_type == "BOOLEAN" and item[field_name] is True and field_name in true_booleans:
+                            raise ValueError(f"Error: metadata field '{field_name}' is marked as ONE_TRUE but multiple items have it set to true")
+                        if "ONE_FALSE" in field_modifiers and field_type == "BOOLEAN" and item[field_name] is False and field_name in false_booleans:
+                            raise ValueError(f"Error: metadata field '{field_name}' is marked as ONE_FALSE but multiple items have it set to false")
+                        
+                        if field_type == "BOOLEAN" and item[field_name] is True:
+                            true_booleans.append(field_name)
+                        elif field_type == "BOOLEAN" and item[field_name] is False:
+                            false_booleans.append(field_name)
+
+                        if "NONZERO" in field_modifiers and field_type in ["INT", "FLOAT"] and item[field_name] == 0:
+                            raise ValueError(f"Error: metadata field '{field_name}' is marked as NONZERO but has a value of zero")
+                        
+                        if "NONEMPTY" in field_modifiers and field_type == "STRING" and item[field_name] == "":
+                            raise ValueError(f"Error: metadata field '{field_name}' is marked as NONEMPTY but is empty")
+                        
+                        if "UNIQUE" in field_modifiers:
+                            # check if the value is unique in the metadata list
+                            values = [m[field_name] for m in metadata if field_name in m]
+                            if values.count(item[field_name]) > 1:
+                                raise ValueError(f"Error: metadata field '{field_name}' is marked as UNIQUE but has the duplicate value '{item[field_name]}'")
+
+                        # find max and min modifiers
+                        for modifier in field_modifiers:
+                            if modifier.startswith("MAX:"):
+                                max_value = modifier[4:]
+                                # make sure max_value is a number
+                                try:
+                                    float(max_value)
+                                except ValueError:
+                                    continue
+
+                                if field_type in ["INT", "FLOAT"]:
+                                    if item[field_name] > float(max_value):
+                                        raise ValueError(f"Error: metadata field '{field_name}' exceeds maximum value of {max_value}")
+                            elif modifier.startswith("MIN:"):
+                                min_value = modifier[4:]
+
+                                # make sure min_value is a number
+                                try:
+                                    float(min_value)
+                                except ValueError:
+                                    continue
+
+                                if field_type in ["INT", "FLOAT"]:
+                                    if item[field_name] < float(min_value):
+                                        raise ValueError(f"Error: metadata field '{field_name}' is below minimum value of {min_value}")
+                            elif modifier.startswith("MINLEN:"):
+                                min_value = modifier[6:]
+
+                                # make sure min_value is a number
+                                try:
+                                    float(min_value)
+                                except ValueError:
+                                    continue
+
+                                if field_type == "STRING":
+                                    if len(item[field_name]) < int(min_value):
+                                        raise ValueError(f"Error: metadata field '{field_name}' is below minimum length of {min_value}")
+                            elif modifier.startswith("MAXLEN:"):
+                                max_value = modifier[6:]
+
+                                # make sure max_value is a number
+                                try:
+                                    float(max_value)
+                                except ValueError:
+                                    continue
+
+                                if field_type == "STRING":
+                                    if len(item[field_name]) > int(max_value):
+                                        raise ValueError(f"Error: metadata field '{field_name}' exceeds maximum length of {max_value}")
+                                    
+                        if "SORTED" in field_modifiers:
+                            if field_name in previous_value_of_sorted_field:
+                                if item[field_name] < previous_value_of_sorted_field[field_name]:
+                                    raise ValueError(f"Error: metadata field '{field_name}' is marked as SORTED but the items are not in sorted order")
+                            previous_value_of_sorted_field[field_name] = item[field_name]
 
                 loaded_images = []
                 loaded_masks = []
@@ -1364,6 +1520,60 @@ class AIHubActionNewImageBatch:
         )
 
         return (images,)
+    
+class AIHubActionNewFrames:
+    """
+    Builds new frames for video from a batch of images
+    effectively acts like as AIHubNewImageBatch but sends a special event
+    telling it to use the images as frames for a video
+    """
+
+    CATEGORY = "aihub/actions"
+    FUNCTION = "run_action"
+    
+    RETURN_TYPES = ("IMAGE",)
+    OUTPUT_NODE = True
+
+    @classmethod
+    def IS_CHANGED(cls, **kwargs):
+        return float("NaN")
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "images": ("IMAGE",),
+                "action": (["REPLACE", "APPEND"], {"default": "REPLACE", "tooltip": "This is a file level action for file storage, if append is selected, the images will be added to existing ones, if replace is selected, existing images will be replaced"}),
+                "name": ("STRING", {"default": "new image batch", "tooltip": "The name of the images to be used as filenames, a number will be added to each image to make it unique"}),
+                "insert_index": ("INT", {"default": -1, "tooltip": "The starting index for the frames, where to place them, negative indexes are allowed to insert at the end","min": -2147483648, "max": 2147483647}),
+                "insert_action": (["REPLACE", "APPEND", {"default": "REPLACE", "tooltip": "The action to execute on the video frames themselves that are being worked on"}])
+            },
+            "optional": {
+                "file_name": ("STRING", {"default": "", "tooltip": "The filename to use as base extension included, if not given the name value will be used with a .png extension"}),
+            }
+        }
+
+    def run_action(self, images, action, name, insert_index, insert_action, file_name=""):
+        AIHubActionNewImageBatch().run_action(images, action, name, None, file_name)
+
+        if not file_name:
+            file_name = name
+            if not file_name.lower().endswith(".png"):
+                file_name += ".png"
+            # replace spaces with underscores
+            file_name = file_name.replace(" ", "_")
+
+        SERVER.send_json_to_current_client_sync(
+            {
+                "type": "USE_AS_FRAMES",
+                "file_name": file_name,
+                "name": name,
+                "file_action": action,
+                "count": images.shape[0],
+                "insert_index": insert_index,
+                "insert_action": insert_action,
+            }
+        )
     
 class AIHubActionNewLayer:
     CATEGORY = "aihub/actions"

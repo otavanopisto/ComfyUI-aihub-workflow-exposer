@@ -21,6 +21,7 @@ NODE_CLASS_MAPPINGS = {
     "AIHubExposeModelSimple": AIHubExposeModelSimple,
     "AIHubExposeAudio": AIHubExposeAudio,
     "AIHubExposeVideo": AIHubExposeVideo,
+    "AIHubExposeFrame": AIHubExposeFrame,
     "AIHubExposeProjectAudio": AIHubExposeProjectAudio,
     "AIHubExposeProjectVideo": AIHubExposeProjectVideo,
     "AIHubExposeProjectImage": AIHubExposeProjectImage,
@@ -47,6 +48,7 @@ NODE_CLASS_MAPPINGS = {
     "AIHubActionNewAudioSegment": AIHubActionNewAudioSegment,
     "AIHubActionNewText": AIHubActionNewText,
     "AIHubActionNewImageBatch": AIHubActionNewImageBatch,
+    "AIHubActionNewFrames": AIHubActionNewFrames,
 
     "AIHubUtilsCropMergedImageToLayerSize": AIHubUtilsCropMergedImageToLayerSize,
     "AIHubUtilsFitLayerToMergedImage": AIHubUtilsFitLayerToMergedImage,
@@ -89,6 +91,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "AIHubExposeModelSimple": "AIHub Expose Model (Simple)",
     "AIHubExposeAudio": "AIHub Expose Audio",
     "AIHubExposeVideo": "AIHub Expose Video",
+    "AIHubExposeFrame": "AIHub Expose Frame",
     "AIHubExposeProjectAudio": "AIHub Expose Project Audio",
     "AIHubExposeProjectVideo": "AIHub Expose Project Video",
     "AIHubExposeProjectImage": "AIHub Expose Project Image",
@@ -110,6 +113,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "AIHubActionNewAudio": "AIHub Action New Audio",
     "AIHubActionNewAudioSegment": "AIHub Action New Audio Segment",
     "AIHubActionNewImageBatch": "AIHub Action New Image Batch",
+    "AIHubActionNewFrames": "AIHub Action New Frames",
 
     "AIHubActionSetProjectConfigInteger": "AIHub Action Set Project Config Integer",
     "AIHubActionSetProjectConfigFloat": "AIHub Action Set Project Config Float",
