@@ -653,10 +653,7 @@ class AIHubServer:
             for key, node in workflow_copy.items():
                 class_type = node.get("class_type", "")
                 if class_type.startswith("AIHubExpose") and node.get("inputs", {}).get("id", None) == expose_id:
-                    if class_type == "AIHubExposeImage" or class_type == "AIHubExposeFile":
-                        if not isinstance(request["expose"][expose_id], dict) or "local_file" not in request["expose"][expose_id]:
-                            return None, False, f"Invalid parameter for expose id {expose_id}, must be an object with a local_file property"
-
+                    if isinstance(request["expose"][expose_id], dict) and "local_file" in request["expose"][expose_id]:
                         # local_file is a special case, it must represent a local file path within a subdirectory that is
                         # specific for the given websocket session, so we must check that it is alphanumeric and does not contain any path traversal characters
                         local_file_path = request["expose"][expose_id]["local_file"]
@@ -677,7 +674,7 @@ class AIHubServer:
                         for prop_key, prop_value in request["expose"][expose_id].items():
                             if prop_key != "local_file":
                                 workflow_copy[key]["inputs"][prop_key] = prop_value
-                    elif class_type == "AIHubExposeImageBatch":
+                    elif isinstance(request["expose"][expose_id], dict) and "local_files" in request["expose"][expose_id]:
                         if not isinstance(request["expose"][expose_id], dict) or "local_files" not in request["expose"][expose_id]:
                             return None, False, f"Invalid parameter for expose id {expose_id}, must be an object with a local_files property"
                         
