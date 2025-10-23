@@ -795,11 +795,11 @@ class AIHubServer:
                             if "if_not_exists" in data and data["if_not_exists"] == True:
                                 full_path = path.join(socket_file_dir, data["filename"])
                                 if path.exists(full_path) and path.isfile(full_path):
-                                    await ws.send_json({'type': 'FILE_UPLOAD_SKIP', 'filename': data["filename"]})
+                                    await ws.send_json({'type': 'FILE_UPLOAD_SKIP', 'file': data["filename"]})
                                     PREVIOUS_UPLOAD_HEADER = None
                                     continue
                             PREVIOUS_UPLOAD_HEADER = data
-                            await ws.send_json({'type': 'UPLOAD_ACK', 'filename': data["filename"]})
+                            await ws.send_json({'type': 'UPLOAD_ACK', 'file': data["filename"]})
                             continue
 
                         elif 'cancel' in data and data["type"] == "WORKFLOW_OPERATION":

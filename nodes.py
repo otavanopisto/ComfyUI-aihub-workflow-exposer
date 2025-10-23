@@ -1159,7 +1159,7 @@ class AIHubExposeProjectText:
             "required": {
                 "id": ("STRING", {"default": "exposed_text", "tooltip": "A unique custom id for this workflow."}),
                 "file_name": ("STRING", {"default": "text.txt", "tooltip": "The name of the text file as stored in the project files, including extension"}),
-                "batch_index": ("STRING", {"default": "", "tooltip": "If the file belongs to a batch, the index of the latent to load, it must be a single integer"}),
+                "batch_index": ("STRING", {"default": "", "tooltip": "If the file belongs to a batch, the index of the latent to load, it must be a single integer, and it can be negative to count from the end"}),
             },
             "hidden": {
                 "local_file": ("STRING", {"default": "", "tooltip": "A local file to load the text from, if given this will be used instead of loading from file"}),
@@ -1199,7 +1199,7 @@ class AIHubExposeProjectVideo:
             "required": {
                 "id": ("STRING", {"default": "exposed_video", "tooltip": "A unique custom id for this workflow."}),
                 "file_name": ("STRING", {"default": "video.mp4", "tooltip": "The name of the video file as stored in the project files, including extension"}),
-                "batch_index": ("STRING", {"default": "", "tooltip": "If the file belongs to a batch, the index of the latent to load, it must be a single integer"}),
+                "batch_index": ("STRING", {"default": "", "tooltip": "If the file belongs to a batch, the index of the latent to load, it must be a single integer, and it can be negative to count from the end"}),
             },
             "hidden": {
                 "local_file": ("STRING", {"default": "", "tooltip": "A local file to load the video from, if given this will be used instead of loading from file"}),
@@ -1276,7 +1276,7 @@ class AIHubExposeProjectAudio:
             "required": {
                 "id": ("STRING", {"default": "exposed_audio", "tooltip": "A unique custom id for this workflow."}),
                 "file_name": ("STRING", {"default": "audio.mp3", "tooltip": "The name of the audio file as stored in the project files, including extension"}),
-                "batch_index": ("STRING", {"default": "", "tooltip": "If the file belongs to a batch, the index of the latent to load, it must be a single integer"}),
+                "batch_index": ("STRING", {"default": "", "tooltip": "If the file belongs to a batch, the index of the latent to load, it must be a single integer, and it can be negative to count from the end"}),
             },
             "hidden": {
                 "local_file": ("STRING", {"default": "", "tooltip": "A local file to load the audio from, if given this will be used instead of loading from file"}),
@@ -1351,7 +1351,7 @@ class AIHubExposeProjectLatent:
             "required": {
                 "id": ("STRING", {"default": "exposed_latent", "tooltip": "A unique custom id for this workflow."}),
                 "file_name": ("STRING", {"default": "latent.safetensors", "tooltip": "The name of the latent file as stored in the project files, including extension"}),
-                "batch_index": ("STRING", {"default": "", "tooltip": "If the file belongs to a batch, the index of the latent to load, it must be a single integer"}),
+                "batch_index": ("STRING", {"default": "", "tooltip": "If the file belongs to a batch, the index of the latent to load, it must be a single integer, and it can be negative to count from the end"}),
             },
             "hidden": {
                 "local_file": ("STRING", {"default": "", "tooltip": "A local file to load the latent from, if given this will be used instead of loading from file"}),
@@ -1516,6 +1516,8 @@ class AIHubActionNewImageBatch:
                     "file_name": file_name,
                     "name": name,
                     "count": c_images.shape[0],
+                    "batch_index": j,
+                    "batch_size": c_images.shape[0],
                 },
         )
 
