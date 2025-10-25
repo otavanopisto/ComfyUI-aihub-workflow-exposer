@@ -132,7 +132,7 @@ class AIHubExposeInteger:
             }
         }
 
-    def get_exposed_int(self, label, tooltip, min, max, step, value, description, advanced, index):
+    def get_exposed_int(self, id, label, tooltip, min, max, step, value, advanced, index):
         if (value < min):
             raise ValueError(f"Error: {id} should be greater or equal to {min}")
         if (value > max):

@@ -253,6 +253,9 @@ function validateWorkflow(exported, modelsAndLoras) {
 
     const allGood = Object.keys(exported).every(nodeId => {
         const node = exported[nodeId];
+        if (!node.class_type.startsWith("AIHub")) {
+            return true; // skip validation for non-AIHub nodes
+        }
         const nodeIdValue = node.inputs.id;
         if ("batch_index" in node.inputs) {
             // batch_index is a string, check if that string value is a valid integer
@@ -291,10 +294,15 @@ function validateWorkflow(exported, modelsAndLoras) {
             // file_name must not contain special characters
             const fileName = node.inputs.file_name;
             if (fileName) {
-                const regex = /^[a-zA-Z_\-]+$/;
+                const regex = /^[a-zA-Z_\-\.]+$/;
                 if (!regex.test(fileName)) {
                     const dialog = new ComfyDialog()
-                    dialog.show("Validation Error: The file_name value in node " + nodeIdValue + " contains invalid characters, only letters, underescores and dashes are allowed");
+                    // may not have nodeIdValue set because Action nodes do not require an id
+                    if (typeof nodeIdValue === "undefined" || nodeIdValue === null || nodeIdValue === "") {
+                        dialog.show("Validation Error: The file_name value in node class " + node.class_type + " contains invalid characters, only letters, underescores and dashes are allowed: " + fileName);
+                    } else {
+                        dialog.show("Validation Error: The file_name value in node " + nodeIdValue + " contains invalid characters, only letters, underescores and dashes are allowed: " + fileName);
+                    }
                     return false;
                 }
             }
