@@ -757,7 +757,7 @@ class AIHubExposeImageBatch:
                 "maxlen": ("INT", {"default": 1000}),
                 "index": ("INT", {"default": 0, "tooltip": "This value is used for sorting the input fields when displaying; lower values will appear first."}),
                 "metadata_fields": ("STRING", {"default": "", "multiline": True, "tooltip": "A newline separated list of metadata fields to include in the metadata JSON for each image in the batch," +
-                                               " add a space with the type next to it, if not specified it will be considered integer, valid types are: INT, FLOAT, FLOAT, STRING and BOOLEAN." +
+                                               " add a space with the type next to it, if not specified it will be considered integer, valid types are: INT, FLOAT, STRING and BOOLEAN." +
                                                " A second space and further allows for specifying modifiers, valid modifiers are SORTED, UNIQUE, NONZERO, NONEMPTY, MULTILINE. " +
                                                " for BOOLEAN it is also possible to use ONE_TRUE and ONE_FALSE as modifiers." +
                                                " It is also possible to add numeric validity modifiers with a colon, for example MAX:100, MAXLEN:100, MIN:0 or MINLEN:0 " +

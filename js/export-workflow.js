@@ -44,8 +44,8 @@ function getWorkflowId(exported) {
 
 const validTypes = ["INT", "FLOAT", "BOOLEAN", "STRING"];
 const validModifiersForType = {
-    "INT": ["SORTED", "NONZERO", "UNIQUE"],
-    "FLOAT": ["SORTED", "NONZERO", "UNIQUE"],
+    "INT": ["SORTED", "UNIQUE"],
+    "FLOAT": ["SORTED", "UNIQUE"],
     "BOOLEAN": ["ONE_TRUE", "ONE_FALSE"],
     "STRING": ["UNIQUE", "NONEMPTY", "MULTILINE"]
 }
