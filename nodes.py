@@ -762,7 +762,7 @@ class AIHubExposeImageBatch:
                                                " for BOOLEAN it is also possible to use ONE_TRUE and ONE_FALSE as modifiers." +
                                                " It is also possible to add numeric validity modifiers with a colon, for example MAX:100, MAXLEN:100, MIN:0 or MINLEN:0 " +
                                                " But also a property name provided that property exist in the project and is an expose integer or expose project integer " +
-                                               " For example: 'frame_number INT POSITIVE SORTED MAX:total_frames\nprompt_at_frame STRING NONEMPTY MULTILINE MAXLEN:100'"}),
+                                               " For example: 'frame_number INT SORTED MAX:total_frames\nprompt_at_frame STRING NONEMPTY MULTILINE MAXLEN:100'"}),
                 "metadata_fields_label": ("STRING", {"default": "", "multiline": True, "tooltip": "A newline separated list of labels for the metadata fields to include in the metadata JSON for each image in the batch. Must match the number of metadata fields."}),
             },
             "optional": {
