@@ -486,7 +486,7 @@ class AIHubServer:
         about the workflow without sending the whole workflow data.
         """
         # we build the basic data structure for the workflow summary
-        workflow_summary = {"expose":{}}
+        workflow_summary = {"expose":{}, "conditions": []}
 
         workflow_locale_patch = None
         if locale is not None and locale != "default":
@@ -515,7 +515,7 @@ class AIHubServer:
 
             # check if it is a AIHubWorkflowController or AIHubExpose node
             # those are the only nodes we care about for the summary
-            if node.get("class_type") == "AIHubWorkflowController" or node.get("class_type", "").startswith("AIHubExpose"):
+            if node.get("class_type") == "AIHubWorkflowController" or node.get("class_type", "").startswith("AIHubExpose") or node.get("class_type") == "AIHubAddRunCondition":
                 # the basic data structure for the node summary
                 data = node.get("inputs", {})
                 data_patch = {}
@@ -525,7 +525,7 @@ class AIHubServer:
                     # apply the locale patch to the data
                     data_patch = workflow_locale_patch.get(nodeId, {})
                     for key, value in data_patch.items():
-                        if key in ["description", "name", "tooltip", "label", "options_label", "category", "metadata_fields_label"]:
+                        if key in ["description", "name", "tooltip", "label", "options_label", "category", "metadata_fields_label", "error"]:
                             data[key] = value
 
                 # if it is a controller node, we copy all the data to the workflow summary
@@ -533,6 +533,10 @@ class AIHubServer:
                     # put every property of data into workflow_summary
                     for key in data:
                         workflow_summary[key] = data[key]
+
+                elif node.get("class_type") == "AIHubAddRunCondition":
+                    # add a new condition in the conditions list
+                    workflow_summary["conditions"].append(data)
 
                 # if it is an AIHubExpose node, we add it to the expose list
                 else:

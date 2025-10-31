@@ -47,10 +47,17 @@ const validModifiersForType = {
     "INT": ["SORTED", "UNIQUE"],
     "FLOAT": ["SORTED", "UNIQUE"],
     "BOOLEAN": ["ONE_TRUE", "ONE_FALSE"],
-    "STRING": ["UNIQUE", "NONEMPTY", "MULTILINE"]
+    "STRING": ["UNIQUE", "MULTILINE"]
 }
 
 const validSpecialModifiersForType = {
+    "INT": ["MAX", "MIN", "DEFAULT", "MAXOFFSET", "MINOFFSET"],
+    "FLOAT": ["MAX", "MIN", "DEFAULT", "MAXOFFSET", "MINOFFSET"],
+    "BOOLEAN": ["DEFAULT"],
+    "STRING": ["MAXLEN", "MINLEN", "MAXLENOFFSET", "MINLENOFFSET"]
+}
+
+const validSpecialModifiersForTypeSupportExposeAsValue = {
     "INT": ["MAX", "MIN"],
     "FLOAT": ["MAX", "MIN"],
     "BOOLEAN": [],
@@ -65,13 +72,13 @@ const validSpecialModifiersValueTypeValidatorForType = {
 }
 
 const validSpecialModifiersValueTypeNodeClassType = {
-    "INT": ["AIHubExposeInt", "AIHubExposeProjectInt"],
-    "FLOAT": ["AIHubExposeInt", "AIHubExposeFloat", "AIHubExposeProjectFloat", "AIHubExposeProjectInt"],
+    "INT": ["AIHubExposeInteger", "AIHubExposeProjectInteger"],
+    "FLOAT": ["AIHubExposeInteger", "AIHubExposeFloat", "AIHubExposeProjectFloat", "AIHubExposeProjectInteger"],
     "BOOLEAN": null,
-    "STRING": ["AIHubExposeInt", "AIHubExposeProjectInt"]
+    "STRING": ["AIHubExposeInteger", "AIHubExposeProjectInteger"]
 }
 
-function validateMetadataFieldLine(nodeInputId, line, lineNumber) {
+function validateMetadataFieldLine(nodeInputId, line, lineNumber, exported) {
     if (!line || line.trim() === "") {
         const dialog = new ComfyDialog()
         dialog.show("Validation Error: The metadata field line in node " + nodeInputId + " is empty at line " + (lineNumber + 1));
@@ -119,6 +126,11 @@ function validateMetadataFieldLine(nodeInputId, line, lineNumber) {
             if (valueValidator) {
                 const value = valueValidator(valuePart);
                 if (isNaN(value)) {
+                    if (!validSpecialModifiersForTypeSupportExposeAsValue[type].includes(specialModifier)) {
+                        const dialog = new ComfyDialog()
+                        dialog.show("Validation Error: The metadata field special modifier '" + modifier + "' in node " + nodeInputId + " is not supported for expose as value");
+                        return false;
+                    }
                     // check if there is a node with that id and of the correct class type
                     const nodeClassTypes = validSpecialModifiersValueTypeNodeClassType[type];
                     let found = false;
@@ -321,6 +333,46 @@ function validateWorkflow(exported, modelsAndLoras) {
             }
         }
 
+        const allPassed = ["max_expose_id", "min_expose_id", "maxlen_expose_id", "minlen_expose_id"].every(key => {
+            if (key in node.inputs) {
+                const exposeId = node.inputs[key];
+                if (exposeId && typeof exposeId !== "string") {
+                    const dialog = new ComfyDialog()
+                    dialog.show("Validation Error: The " + key + " value in node " + nodeIdValue + " must be a string representing the expose id");
+                    return false;
+                }
+                if (!exposeId) {
+                    return true; // empty expose id is allowed
+                }
+                // find the expose to see if it exists and is of the correct type
+                let found = false;
+                for (const otherNodeId in exported) {
+                    const otherNode = exported[otherNodeId];
+                    if (otherNode.class_type.startsWith("AIHubExpose") && otherNode.inputs.id === exposeId) {
+                        found = true;
+                        // Check if the exposed node is of the correct type
+                        if (otherNode.class_type !== "AIHubExposeInteger" && otherNode.class_type !== "AIHubExposeProjectConfigInteger" && otherNode.class_type !== "AIHubExposeFloat" && otherNode.class_type !== "AIHubExposeProjectConfigFloat") {
+                            const dialog = new ComfyDialog()
+                            dialog.show("Validation Error: The " + key + " value in node " + nodeIdValue + " is not of the correct type, it must be an exposed integer or float");
+                            return false;
+                        }
+                    }
+                }
+
+                if (!found) {
+                    const dialog = new ComfyDialog()
+                    dialog.show("Validation Error: The " + key + " value in node " + nodeIdValue + " does not correspond to any exposed integer or float");
+                    return false;
+                }
+            }
+
+            return true
+        });
+
+        if (!allPassed) {
+            return false;
+        }
+
         if (node.class_type === "AIHubExposeModel" || node.class_type === "AIHubExposeModelSimple") {
             const potentialModel = node.inputs.model;
             if (potentialModel && !modelsAndLoras.checkpoints.includes(potentialModel) && !modelsAndLoras.diffusion_models.includes(potentialModel)) {
@@ -417,7 +469,7 @@ function validateWorkflow(exported, modelsAndLoras) {
             if (metadataFields.length !== 0) {
                 for (let i = 0; i < lines.length; i++) {
                     const line = lines[i];
-                    const valid = validateMetadataFieldLine(nodeIdValue, line, i);
+                    const valid = validateMetadataFieldLine(nodeIdValue, line, i, exported);
                     if (!valid) {
                         return false;
                     }
@@ -453,10 +505,10 @@ function cleanWorkflowForLocaleData(exported) {
     const cleaned = {};
     Object.keys(exported).forEach(nodeId => {
         const node = exported[nodeId];
-        if (node.class_type.startsWith("AIHubExpose") || node.class_type === "AIHubWorkflowController") {
+        if (node.class_type.startsWith("AIHubExpose") || node.class_type === "AIHubWorkflowController" || node.class_type === "AIHubAddRunCondition") {
             cleaned[nodeId] = {}
             Object.keys(node.inputs).forEach(key => {
-                if (["description", "name", "tooltip", "label", "options_label", "category", "metadata_fields_label"].includes(key)) {
+                if (["description", "name", "tooltip", "label", "options_label", "category", "metadata_fields_label", "error"].includes(key)) {
                     cleaned[nodeId][key] = node.inputs[key];
                 }
             });

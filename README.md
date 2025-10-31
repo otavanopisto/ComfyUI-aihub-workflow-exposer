@@ -336,7 +336,11 @@ The expose image batch allows to expose a series of images into an image batch t
  - tooltip: A tooltip about this and what it represents
  - type: all_frames, all_layers_at_image_size or upload; for the different possible combinations just to let the client know what it has to send, the client may decide which extra metadata to append
  - minlen: the minimum length of the batch
+ - minlen_expose_id: the minimum length based on an expose id (will superseed minlen)
+ - minlen_expose_expose: an offset to the minlen given by the expose
  - maxlen: the maximum length of the batch
+ - maxlen_expose_id: the maximum length based on an expose id (will superseed maxlen)
+ - maxlen_expose_offset: an offset to the maxlen given by the expose
  - index: Normally it is at the discretion of the client to figure how to sort the fields, use this to specify a specific ordering
  - metadata_fields: image batch can have extra metadata appended to it, the purpose is to specify extra details for example when specifying frame numbers or prompts for the specific images that are given, there is a specific way to how to specify each metadata field, following
  - metadata_fields_label: the label for the metadata fields in the same order
@@ -346,8 +350,8 @@ The expose image batch allows to expose a series of images into an image batch t
 
  - field_id: Can be any valid json id
  - TYPE: must be either `INT` `FLOAT` `BOOLEAN` or `STRING`
- - MODIFIERS (basic): allowed are for numeric types: `SORTED` `NONZERO`, for numeric and string: `UNIQUE`, for string: `NONEMPTY` and `MULTILINE`, for boolean: `ONE_FALSE` and `ONE_TRUE`
- - MODIFIERS (validators): allowed are for numeric types: `MAX:(number or expose id)` `MIN:(number or expose id)` and for string `MAXLEN:(number or expose id)` `MINLEN:(number or expose id)`; example `MAX:100` or `MAX:maximum_count` where `maximum_count` is the id of another property exposed that is either an integer or a project integer that is exposed, the property must be exposed
+ - MODIFIERS (basic): allowed are for numeric types: `SORTED`, for numeric and string: `UNIQUE`, for string: `MULTILINE`, for boolean: `ONE_FALSE` and `ONE_TRUE`
+ - MODIFIERS (validators): allowed are for numeric types: `MAX:(number or expose id)` `MIN:(number or expose id) MAXOFFSET:(number) MINOFFSET:(number) DEFAULT:(number)` and for string `MAXLEN:(number or expose id)` `MINLEN:(number or expose id) MAXLENOFFSET:(number) MINLENOFFSET(number)` MAX; example `MAX:100` or `MAX:maximum_count` where `maximum_count` is the id of another property exposed that is either an integer or a project integer that is exposed, the property must be exposed
 
 The values for the metadata will be provided as a json object in the metadata output, the metadata output can be processed by `AIHub Utils Metadata Map` in order to map one single value for data input into a string; but if more complex behaviour is required, like that on creating loras from image batches, it is expected that a custom node is to be written to handle it; since node handling is not going to cut it.
 
@@ -592,23 +596,27 @@ Provides new audio segment to the client
 
 Provides new video to the client
 
- - input_file: since there is no video format in comfy, provide the input filepath that it can load
+ - video: the video to send to the user
  - action: The file action to execute, `APPEND` will create a text file batch, while `REPLACE` will replace a single existing file or create it if it doesn't exist
  - name: the name of the new file
- - mime_type: the mime type of the file
  - file_name: use this filename with the extension included for the actual filename of the file as it will be stored, (optional)
+ - format: the format of the video
+ - codec: the codec for the video
+ - crf: crf compression
 
 #### AIHub Action New Video Segment
 
 Provides new video segment to the client
 
- - input_file: since there is no video format in comfy, provide the input filepath that it can load
+ - video: the video to send to the user
  - action: The file action to execute, `APPEND` will create a text file batch, while `REPLACE` will replace a single existing file or create it if it doesn't exist
  - reference_segment_id: the segment id to have as a reference for inserting this segment
  - reference_segment_action: the action to execute over that segment, `NEW_AFTER`, `NEW_BEFORE` and `REPLACE`
  - name: the name of the new file
- - mime_type: the mime type of the file
  - file_name: use this filename with the extension included for the actual filename of the file as it will be stored, (optional)
+ - format: the format of the video
+ - codec: the codec for the video
+ - crf: crf compression
 
 #### AIHub Action Set Project Config Boolean
 
@@ -637,6 +645,15 @@ Sets the configuration string of a given project at its project config file
 
  - field: the filed id, use dots for entering sublevels
  - value: the value to set at
+
+### Validation
+
+#### AIHub Add Run Condition
+
+Adds a condition for the run to execute
+
+ - condition: the condition to run, can use expose ids and attributes of them, it can only do very basic operations
+ - error: the error to show the client if the condition does not succeed
 
 ### Utilities
 

@@ -68,6 +68,8 @@ NODE_CLASS_MAPPINGS = {
     "AIHubMetaSetExportedModelImage": AIHubMetaSetExportedModelImage,
     "AIHubMetaSetExportedLoraImage": AIHubMetaSetExportedLoraImage,
     "AIHubMetaSetExportedWorkflowImage": AIHubMetaSetExportedWorkflowImage,
+
+    "AIHubAddRunCondition": AIHubAddRunCondition,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -138,6 +140,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "AIHubMetaSetExportedModelImage": "AIHub Meta Set Exported Model Image",
     "AIHubMetaSetExportedLoraImage": "AIHub Meta Set Exported Lora Image",
     "AIHubMetaSetExportedWorkflowImage": "AIHub Meta Set Exported Workflow Image",
+
+    "AIHubAddRunCondition": "AIHub Add Run Condition",
 }
 
 WEB_DIRECTORY = "./js"

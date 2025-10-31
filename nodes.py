@@ -13,6 +13,8 @@ from comfy.cli_args import args
 from comfy_extras.nodes_audio import load as load_audio_file
 from torch.nn.functional import interpolate
 from comfy.utils import common_upscale
+from comfy_api.latest import InputImpl, Types
+from .video import video_save_to
 
 from PIL import Image
 
@@ -124,7 +126,11 @@ class AIHubExposeInteger:
                 "label": ("STRING", {"default": "Exposed Integer", "tooltip": "This is the label that will appear in the field"}),
                 "tooltip": ("STRING", {"default": "", "tooltip": "An optional tooltip"}),
                 "min": ("INT", {"default": 0, "min": -2147483648, "max": 2147483647}),
+                "min_expose_id": ("STRING", {"default": "", "tooltip": "The id of another exposed integer to use its value as the min value for this integer"}),
+                "min_expose_offset": ("INT", {"default": 0, "tooltip": "An optional offset to add to the exposed min value", "min": -1000, "max": 1000}),
                 "max": ("INT", {"default": 100, "min": -2147483648, "max": 2147483647}),
+                "max_expose_id": ("STRING", {"default": "", "tooltip": "The id of another exposed integer to use its value as the max value for this integer"}),
+                "max_expose_offset": ("INT", {"default": 0, "tooltip": "An optional offset to add to the exposed max value", "min": -1000, "max": 1000}),
                 "step": ("INT", {"default": 1, "min": -2147483648, "max": 2147483647}),
                 "value": ("INT", {"default": 10, "min": -2147483648, "max": 2147483647}),
                 "advanced": ("BOOLEAN", {"default": False, "tooltip": "If set to true, it will make this option be hidden under advanced options for this workflow"}),
@@ -132,7 +138,7 @@ class AIHubExposeInteger:
             }
         }
 
-    def get_exposed_int(self, id, label, tooltip, min, max, step, value, advanced, index):
+    def get_exposed_int(self, id, label, tooltip, min, min_expose_id, min_expose_offset, max, max_expose_id, max_expose_offset, step, value, advanced, index):
         if (value < min):
             raise ValueError(f"Error: {id} should be greater or equal to {min}")
         if (value > max):
@@ -221,7 +227,11 @@ class AIHubExposeFloat:
                 "label": ("STRING", {"default": "Float", "tooltip": "This is the label that will appear in the field."}),
                 "tooltip": ("STRING", {"default": "", "tooltip": "An optional tooltip."}),
                 "min": ("FLOAT", {"default": 0.0, "min": -1.0e+20, "max": 1.0e+20}),
+                "min_expose_id": ("STRING", {"default": "", "tooltip": "The id of another exposed float to use its value as the min value for this float"}),
+                "min_expose_offset": ("FLOAT", {"default": 0.0, "tooltip": "An optional offset to add to the exposed min value", "min": -1000.0, "max": 1000.0}),
                 "max": ("FLOAT", {"default": 1.0, "min": -1.0e+20, "max": 1.0e+20}),
+                "max_expose_id": ("STRING", {"default": "", "tooltip": "The id of another exposed float to use its value as the max value for this float"}),
+                "max_expose_offset": ("FLOAT", {"default": 0.0, "tooltip": "An optional offset to add to the exposed max value", "min": -1000.0, "max": 1000.0}),
                 "step": ("FLOAT", {"default": 0.05, "tooltip": "The step value for the float input.", "min": 0.001, "max": 1.0, "step": 0.001}),
                 "value": ("FLOAT", {"default": 0.5, "min": -1.0e+20, "max": 1.0e+20}),
                 "advanced": ("BOOLEAN", {"default": False, "tooltip": "If set to true, it will make this option be hidden under advanced options for this workflow."}),
@@ -230,7 +240,7 @@ class AIHubExposeFloat:
             }
         }
 
-    def get_exposed_float(self, id, label, tooltip, min, max, step, value, advanced, index, slider):
+    def get_exposed_float(self, id, label, tooltip, min, min_expose_id, min_expose_offset, max, max_expose_id, max_expose_offset, step, value, advanced, index, slider):
         if (value < min):
             raise ValueError(f"Error: {id} should be greater or equal to {min}")
         if (value > max):
@@ -365,7 +375,11 @@ class AIHubExposeString:
                 "label": ("STRING", {"default": "String", "tooltip": "This is the label that will appear in the field."}),
                 "tooltip": ("STRING", {"default": "", "tooltip": "An optional tooltip."}),
                 "minlen": ("INT", {"default": 0}),
+                "minlen_expose_id": ("STRING", {"default": "", "tooltip": "The id of another exposed string to use its length as the min length for this string"}),
+                "minlen_expose_offset": ("INT", {"default": 0, "tooltip": "An optional offset to add to the exposed min length", "min": -1000, "max": 1000}),
                 "maxlen": ("INT", {"default": 1000}),
+                "maxlen_expose_id": ("STRING", {"default": "", "tooltip": "The id of another exposed string to use its length as the max length for this string"}),
+                "maxlen_expose_offset": ("INT", {"default": 0, "tooltip": "An optional offset to add to the exposed max length", "min": -1000, "max": 1000}),
                 "value": ("STRING", {"default": ""}),
                 "multiline": ("BOOLEAN", {"default": False, "tooltip": "If set to true, this field will allow multiline input."}),
                 "advanced": ("BOOLEAN", {"default": False, "tooltip": "If set to true, this option will be hidden under advanced options for this workflow."}),
@@ -373,7 +387,7 @@ class AIHubExposeString:
             }
         }
 
-    def get_exposed_string(self, id, label, tooltip, minlen, maxlen, value, multiline, advanced, index):
+    def get_exposed_string(self, id, label, tooltip, minlen, minlen_expose_id, minlen_expose_offset, maxlen, maxlen_expose_id, maxlen_expose_offset, value, multiline, advanced, index):
         if (len(value) < minlen):
             raise ValueError(f"Error: {label} length should be greater or equal to {minlen}")
         if (len(value) > maxlen):
@@ -590,6 +604,9 @@ class AIHubExposeImage:
                 loaded_image_tuple = loader.load_image(local_file)
                 image = loaded_image_tuple[0]
                 mask = loaded_image_tuple[1]
+                # comfyui has a bug where masks are inverted, so we need to invert it back
+                if mask is not None:
+                    mask = 1.0 - mask
             else:
                 filenameOnly = os.path.basename(local_file)
                 raise ValueError(f"Error: Image file not found: {filenameOnly}")
@@ -685,6 +702,9 @@ class AIHubExposeProjectImage:
                 loaded_image_tuple = loader.load_image(local_file)
                 image = loaded_image_tuple[0]
                 mask = loaded_image_tuple[1]
+                # comfyui has a bug where masks are inverted, so we need to invert it back
+                if mask is not None:
+                    mask = 1.0 - mask
             else:
                 filenameOnly = os.path.basename(local_file)
                 raise ValueError(f"Error: Image file not found: {filenameOnly}")
@@ -758,11 +778,11 @@ class AIHubExposeImageBatch:
                 "index": ("INT", {"default": 0, "tooltip": "This value is used for sorting the input fields when displaying; lower values will appear first."}),
                 "metadata_fields": ("STRING", {"default": "", "multiline": True, "tooltip": "A newline separated list of metadata fields to include in the metadata JSON for each image in the batch," +
                                                " add a space with the type next to it, if not specified it will be considered integer, valid types are: INT, FLOAT, STRING and BOOLEAN." +
-                                               " A second space and further allows for specifying modifiers, valid modifiers are SORTED, UNIQUE, NONZERO, NONEMPTY, MULTILINE. " +
+                                               " A second space and further allows for specifying modifiers, valid modifiers are SORTED, UNIQUE, NONZERO, MULTILINE. " +
                                                " for BOOLEAN it is also possible to use ONE_TRUE and ONE_FALSE as modifiers." +
-                                               " It is also possible to add numeric validity modifiers with a colon, for example MAX:100, MAXLEN:100, MIN:0 or MINLEN:0 " +
-                                               " But also a property name provided that property exist in the project and is an expose integer or expose project integer " +
-                                               " For example: 'frame_number INT SORTED MAX:total_frames\nprompt_at_frame STRING NONEMPTY MULTILINE MAXLEN:100'"}),
+                                               " It is also possible to add numeric validity modifiers with a colon, for example MAX:100, MAXOFFSET:100, MAXLEN:100, MAXLEN:OFFSET, MIN:0, MINOFFSET:0, MINLEN:0 OR MINLENOFFSET:0" +
+                                               " But also a property name provided that property exist in the project and is an expose integer or expose project integer for MAX, MAXLEN, MIN and MINLEN" +
+                                               " For example: 'frame_number INT SORTED MAX:total_frames\nprompt_at_frame STRING MULTILINE MAXLEN:100'"}),
                 "metadata_fields_label": ("STRING", {"default": "", "multiline": True, "tooltip": "A newline separated list of labels for the metadata fields to include in the metadata JSON for each image in the batch. Must match the number of metadata fields."}),
             },
             "optional": {
@@ -777,7 +797,7 @@ class AIHubExposeImageBatch:
     def get_exposed_image_batch(self, id, label, tooltip, type, minlen, maxlen, index, metadata_fields, metadata_fields_label, normalizer=None, local_files=None, metadata="[]"):
         image_batch = None
         masks = None
-        metadata = None
+        metadata_parsed = None
         width = 0
         height = 0
 
@@ -788,25 +808,21 @@ class AIHubExposeImageBatch:
             try:
                 # Parse the JSON string into a Python list of filenames.
                 filenames = json.loads(local_files)
-                metadata = json.loads(metadata)
-                if not isinstance(metadata, list):
+                metadata_parsed = json.loads(metadata)
+                if not isinstance(metadata_parsed, list):
                     raise ValueError("Error: data is not a valid JSON string encoding an array")
                 if not isinstance(filenames, list):
                     raise ValueError("Error: local_files is not a valid JSON string encoding an array")
                 if len(filenames) > maxlen:
                     raise ValueError(f"Error: {id} contains too many files")
-                if len(metadata) != len(filenames):
+                if len(metadata_parsed) != len(filenames):
                     raise ValueError(f"Error: {id} the number of files does not match the number of metadata entries")
-
-                metadata = json.loads(metadata)
-                if not isinstance(metadata, list):
-                    raise ValueError("Error: metadata is not a valid JSON string encoding an array")
 
                 metadata_fields_list = [line.strip() for line in metadata_fields.split("\n") if line.strip()]
                 true_booleans = []
                 false_booleans = []
                 previous_value_of_sorted_field = {}
-                for item in metadata:
+                for item in metadata_parsed:
                     if not isinstance(item, dict):
                         raise ValueError("Error: metadata items must be objects")
                     
@@ -816,7 +832,7 @@ class AIHubExposeImageBatch:
                         field_type = field_splitted[1]
                         field_modifiers = field_splitted[2:] if len(field_splitted) > 2 else []
 
-                        if field_type not in item:
+                        if field_name not in item:
                             raise ValueError(f"Error: metadata item is missing field '{field_def}'")
                         elif field_type == "INT" and not isinstance(item[field_name], int):
                             raise ValueError(f"Error: metadata field '{field_name}' is not of type INT")
@@ -836,16 +852,10 @@ class AIHubExposeImageBatch:
                             true_booleans.append(field_name)
                         elif field_type == "BOOLEAN" and item[field_name] is False:
                             false_booleans.append(field_name)
-
-                        if "NONZERO" in field_modifiers and field_type in ["INT", "FLOAT"] and item[field_name] == 0:
-                            raise ValueError(f"Error: metadata field '{field_name}' is marked as NONZERO but has a value of zero")
-                        
-                        if "NONEMPTY" in field_modifiers and field_type == "STRING" and item[field_name] == "":
-                            raise ValueError(f"Error: metadata field '{field_name}' is marked as NONEMPTY but is empty")
                         
                         if "UNIQUE" in field_modifiers:
                             # check if the value is unique in the metadata list
-                            values = [m[field_name] for m in metadata if field_name in m]
+                            values = [m[field_name] for m in metadata_parsed if field_name in m]
                             if values.count(item[field_name]) > 1:
                                 raise ValueError(f"Error: metadata field '{field_name}' is marked as UNIQUE but has the duplicate value '{item[field_name]}'")
 
@@ -915,7 +925,11 @@ class AIHubExposeImageBatch:
                         # Load each image and append it to the list.
                         loaded_img_tuple = loader.load_image(filename)
                         loaded_images.append(loaded_img_tuple[0])
-                        loaded_masks.append(loaded_img_tuple[1])
+                        mask = loaded_img_tuple[1]
+                        # comfyui has a bug where masks are inverted, so we need to invert it back
+                        if mask is not None:
+                            mask = 1.0 - mask
+                        loaded_masks.append(mask)
                     else:
                         filenameOnly = os.path.basename(filename)
                         raise ValueError(f"Error: Image file not found: {filenameOnly}")
@@ -932,7 +946,7 @@ class AIHubExposeImageBatch:
             # Return an empty placeholder if no input is provided.
             raise ValueError("You must specify local_files for this node to function")
         
-        return (image_batch, masks, metadata, width, height,)
+        return (image_batch, masks, metadata_parsed, width, height,)
     
 class AIHubExposeProjectImageBatch:
     """
@@ -983,7 +997,11 @@ class AIHubExposeProjectImageBatch:
                         # Load each image and append it to the list.
                         loaded_img_tuple = loader.load_image(filename)
                         loaded_images.append(loaded_img_tuple[0])
-                        loaded_masks.append(loaded_img_tuple[1])
+                        mask = loaded_img_tuple[1]
+                        # comfyui has a bug where masks are inverted, so we need to invert it back
+                        if mask is not None:
+                            mask = 1.0 - mask
+                        loaded_masks.append(mask)
 
             except json.JSONDecodeError:
                 # Handle invalid JSON input gracefully.
@@ -1190,8 +1208,8 @@ class AIHubExposeProjectVideo:
     CATEGORY = "aihub/expose"
     FUNCTION = "get_exposed_video"
 
-    RETURN_TYPES = ("STRING",)
-    RETURN_NAMES = ("VIDEO_FILEPATH",)
+    RETURN_TYPES = ("VIDEO",)
+    RETURN_NAMES = ("VIDEO",)
 
     @classmethod
     def INPUT_TYPES(s):
@@ -1207,17 +1225,17 @@ class AIHubExposeProjectVideo:
         }
 
     def get_exposed_video(self, id, file_name, batch_index, local_file=None):
-        video_file = None
+        video_object = None
         if local_file is not None and local_file.strip() != "":
             if (os.path.exists(local_file)):
-                video_file = local_file
+                video_object = InputImpl.VideoFromFile(local_file)
             else:
                 filenameOnly = os.path.basename(local_file)
                 raise ValueError(f"Error: Video file not found: {filenameOnly}")
         else:
             raise ValueError("You must specify the local_file of the video for this node to function")
 
-        return (video_file,)
+        return (video_object,)
     
 class AIHubExposeVideo:
     """
@@ -1229,8 +1247,8 @@ class AIHubExposeVideo:
     CATEGORY = "aihub/expose"
     FUNCTION = "get_exposed_video"
 
-    RETURN_TYPES = ("STRING", "STRING")
-    RETURN_NAMES = ("VIDEO_FILEPATH", "SEGMENT_ID")
+    RETURN_TYPES = ("VIDEO", "STRING")
+    RETURN_NAMES = ("VIDEO", "SEGMENT_ID")
 
     @classmethod
     def INPUT_TYPES(s):
@@ -1249,17 +1267,17 @@ class AIHubExposeVideo:
         }
 
     def get_exposed_video(self, id, label, tooltip, type, index, segment_id="", local_file=None):
-        video_file = None
+        video_object = None
         if local_file is not None and local_file.strip() != "":
             if (os.path.exists(local_file)):
-                video_file = local_file
+                video_object = InputImpl.VideoFromFile(local_file)
             else:
                 filenameOnly = os.path.basename(local_file)
                 raise ValueError(f"Error: Video file not found: {filenameOnly}")
         else:
             raise ValueError("You must specify the local_file of the video for this node to function")
 
-        return (video_file, segment_id)
+        return (video_object, segment_id)
 
 class AIHubExposeProjectAudio:
     """
@@ -1486,7 +1504,7 @@ class AIHubActionNewImageBatch:
             # first we need to get the basename and the extension if any provided
             base_name, ext = os.path.splitext(name)
             # we don't use the extension, we always save as png
-            file_name = base_name + "_" + str(j + 1) + ".png"
+            file_name = base_name + ".png"
             # replace spaces with underscores
             file_name = file_name.replace(" ", "_")
 
@@ -1955,13 +1973,15 @@ class AIHubActionNewVideo:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "input_file": ("STRING", {"default": "new_video.mp4", "tooltip": "The path of the video file to be loaded"}),
-                "mime_type": ("STRING", {"default": "video/mp4", "tooltip": "The mime type of the video"}),
+                "video": ("VIDEO", {"default": "new_video.mp4", "tooltip": "The path of the video file to export"}),
                 "action": (["REPLACE", "APPEND"], {"default": "APPEND", "tooltip": "If append is selected, the video will be added a number to the name to make it unique, if replace is selected, the video will be replaced with the new one"}),
                 "name": ("STRING", {"default": "new video", "tooltip": "The name of the video to be used"}),
+                "format": (Types.VideoContainer.as_input(), {"default": "auto", "tooltip": "The format to save the video as."}),
+                "codec": (Types.VideoCodec.as_input(), {"default": "auto", "tooltip": "The codec to use for the video."}),
+                "crf": ("INT", {"default": 23, "min": 0, "max": 51, "tooltip": "The Constant Rate Factor (CRF) to use for encoding quality (lower is better quality). Only used for certain codecs like H.264."}),
             },
             "optional": {
-                "file_name": ("STRING", {"default": "", "tooltip": "The filename to use, with the extension, if not given the name value will be used with the given format extension based on the mime type"}),
+                "file_name": ("STRING", {"default": "", "tooltip": "The filename to use, with the extension"}),
             }
         }
     
@@ -1970,25 +1990,21 @@ class AIHubActionNewVideo:
     RETURN_TYPES = ()
     FUNCTION = "run_action"
 
-    def run_action(self, input_file, mime_type, action, name, file_name=""):
-        if not os.path.exists(input_file):
-            raise ValueError(f"Error: Video file not found: {input_file}")
-        
+    def run_action(self, video, action, name, format, codec, crf, file_name=""):
         if not file_name:
             file_name = name
-            mime_type_splitted = mime_type.split("/")
-            extension = mime_type_splitted[1] if len(mime_type_splitted) > 1 else "mp4"
+            extension = Types.VideoContainer.get_extension(format)
             if not file_name.lower().endswith(f".{extension}"):
                 file_name += f".{extension}"
             # replace spaces with underscores
             file_name = file_name.replace(" ", "_")
 
-        video_bytes = None
-        with open(input_file, "rb") as f:
-            video_bytes = f.read()
+        mime_type = ("video/" + format) if format and format != "auto" else "video/mp4"
+        video_io_buffer = io.BytesIO()
+        video_save_to(video, video_io_buffer, format=format, codec=codec, crf=crf)
 
         SERVER.send_binary_data_to_current_client_sync(
-            video_bytes, mime_type, {
+            video_io_buffer.getvalue(), mime_type, {
                 "action": "NEW_VIDEO",
                 "file_name": file_name,
                 "file_action": action,
@@ -2007,9 +2023,12 @@ class AIHubActionNewVideoSegment:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "input_file": ("STRING", {"default": "new_video.mp4", "tooltip": "The path of the video file to be loaded"}),
-                "mime_type": ("STRING", {"default": "video/mp4", "tooltip": "The mime type of the video"}),
+                "video": ("VIDEO", {"default": "new_video.mp4", "tooltip": "The path of the video file to export"}),
+                "action": (["REPLACE", "APPEND"], {"default": "APPEND", "tooltip": "If append is selected, the video will be added a number to the name to make it unique, if replace is selected, the video will be replaced with the new one"}),
                 "name": ("STRING", {"default": "new video", "tooltip": "The name of the video to be used"}),
+                "format": (Types.VideoContainer.as_input(), {"default": "auto", "tooltip": "The format to save the video as."}),
+                "codec": (Types.VideoCodec.as_input(), {"default": "auto", "tooltip": "The codec to use for the video."}),
+                "crf": ("INT", {"default": 23, "min": 0, "max": 51, "tooltip": "The Constant Rate Factor (CRF) to use for encoding quality (lower is better quality). Only used for certain codecs like H.264."}),
                 "reference_segment_id": ("STRING", {"default": "", "tooltip": "The reference segment id of the video layer"}),
                 "reference_segment_action": (["REPLACE", "NEW_BEFORE", "NEW_AFTER"], {"default": "NEW_AFTER", "tooltip": "Specify the action to execute at the given segment id"}),
             },
@@ -2023,34 +2042,30 @@ class AIHubActionNewVideoSegment:
     RETURN_TYPES = ()
     FUNCTION = "run_action"
 
-    def run_action(self, input_file, mime_type, name, reference_segment_id, reference_segment_action, file_name=""):
-        if not os.path.exists(input_file):
-            raise ValueError(f"Error: Video file not found: {input_file}")
-
+    def run_action(self, video, action, name, format, codec, crf, reference_segment_id, reference_segment_action, file_name=""):
         if not file_name:
-            mime_type_splitted = mime_type.split("/")
-            extension = mime_type_splitted[1] if len(mime_type_splitted) > 1 else "mp4"
             file_name = name
+            extension = Types.VideoContainer.get_extension(format)
             if not file_name.lower().endswith(f".{extension}"):
                 file_name += f".{extension}"
             # replace spaces with underscores
             file_name = file_name.replace(" ", "_")
 
-        video_bytes = None
-        with open(input_file, "rb") as f:
-            video_bytes = f.read()
+        mime_type = ("video/" + format) if format and format != "auto" else "video/mp4"
+        video_io_buffer = io.BytesIO()
+        video_save_to(video, video_io_buffer, format=format, codec=codec, crf=crf)
 
         SERVER.send_binary_data_to_current_client_sync(
-            video_bytes, mime_type, {
+            video_io_buffer.getvalue(), mime_type, {
                 "action": "NEW_VIDEO_SEGMENT",
                 "file_name": file_name,
+                "file_action": action,
                 "name": name,
                 "type": mime_type,
                 "reference_segment_id": reference_segment_id,
                 "reference_segment_action": reference_segment_action,
             }
         )
-        return ()
 
 class AIHubActionNewText:
     @classmethod
@@ -2105,9 +2120,31 @@ class AIHubActionNewText:
             }
         )
         return ()
+    
+## CONDITIONS
+class AIHubAddRunCondition:
+    """
+    A utility node for adding a run condition to the current graph execution
+    """
+
+    CATEGORY = "aihub/conditions"
+    FUNCTION = "add_run_condition"
+
+    RETURN_TYPES = ()
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "condition": ("STRING", {"default": "my_expose_id > my_other_expose_id", "tooltip": "A condition expression using expose ids, e.g. my_expose_id > 0.5, other exposes are also accessible, only allows simple expressions, boolean logic and math operators"}),
+                "error": ("STRING", {"default": "Condition failed", "tooltip": "The error message to show if the condition fails"}),
+            },
+        }
+
+    def add_run_condition(self, condition, error):
+        return ()
 
 ## UTILS
-
 class AIHubUtilsCropMergedImageToLayerSize:
     """
     A utility node for cropping a merged image to the size of a given layer
@@ -2456,7 +2493,6 @@ class AIHubUtilsLoadCLIP:
                     print(f"Reusing already loaded CLIP {clip_1_stripped} with type {type}")
                     clip_loaded = LAST_CLIP
                 else:
-                    print(type(clip_1))
                     print(f"Using CLIPLoader to load the CLIP {clip_1_stripped} with type {type}")
                     clip_loader = CLIPLoader()
                     clip_loaded, = clip_loader.load_clip(clip_1_stripped, type, device=device)
@@ -2532,19 +2568,14 @@ class AIHubUtilsMetadataMap:
         }
 
     def metadata_map(self, metadata, field, separator, true_value, false_value):
-        if not metadata or metadata.strip() == "":
+        if not metadata:
             return ("",)
-        
-        try:
-            metadata_json = json.loads(metadata)
-        except json.JSONDecodeError as e:
-            raise ValueError(f"Error: Could not parse metadata JSON: {e}")
 
-        if not isinstance(metadata_json, list):
+        if not isinstance(metadata, list):
             raise ValueError("Error: Metadata JSON is not a list")
 
         values = []
-        for item in metadata_json:
+        for item in metadata:
             if field in item:
                 value = item[field]
                 if isinstance(value, bool):
@@ -2573,9 +2604,9 @@ class Normalizer:
 
         if is_tensor:
             # Convert images and masks to list of tensors
-            images = [img for img in images]
+            images = [img.unsqueeze(0) for img in images]
             if masks is not None:
-                masks = [mask for mask in masks]
+                masks = [mask.unsqueeze(0) for mask in masks]
 
             if normalize_width == 0 or normalize_height == 0:
                 raise ValueError("Error: When using tensor images, both normalize_at_width and normalize_at_height must be greater than 0")
@@ -2589,6 +2620,11 @@ class Normalizer:
                     normalize_height = h
                     break
 
+        if len(masks) == 0:
+            masks = None
+        elif len(masks) != len(images):
+            raise ValueError("Error: The number of masks must match the number of images")
+
         width = normalize_width
         height = normalize_height
 
@@ -2596,19 +2632,22 @@ class Normalizer:
             img = images[i]
             mask = None if masks is None else masks[i]
             _, h, w, _ = img.shape
-                    
+
             if w != normalize_width or h != normalize_height:
                 samples = img.movedim(-1, 1)  # NHWC -> NCHW
                 samples = common_upscale(
                     samples, normalize_width, normalize_height, self.normalize_upscale_method, crop="center"
                 )
                 images[i] = samples.movedim(1, -1)  # NCHW -> NHWC
-                if mask is not None:
-                    mask = interpolate(mask.reshape((-1, 1, mask.shape[-2], mask.shape[-1])), size=(height, width), mode='bilinear', align_corners=True)
-                    crop_x = (normalize_width - w) // 2
-                    crop_y = (normalize_height - h) // 2
-                    mask = mask[:, :, crop_y:crop_y+normalize_height, crop_x:crop_x+normalize_width]
-                    masks[i] = mask
+            if mask is not None:
+                c_mask = masks[i]
+                # check if the mask has the correct size
+                if c_mask.shape[2] != normalize_width or c_mask.shape[3] != normalize_height:
+                    samples_masks = c_mask.unsqueeze(1)  # NCHW -> NHW
+                    samples_masks = common_upscale(
+                        samples_masks, normalize_width, normalize_height, self.normalize_upscale_method, crop="center"
+                    )
+                    masks[i] = samples_masks.squeeze(1)  # NHW -> NCHW
 
         # Concatenate all the images into a single batch tensor.
         image_batch = torch.cat(images, dim=0)
