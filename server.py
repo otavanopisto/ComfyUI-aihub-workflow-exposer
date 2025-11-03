@@ -721,7 +721,9 @@ class AIHubServer:
                     elif "value" in workflow_copy[key]["inputs"]:
                         workflow_copy[key]["inputs"]["value"] = request["expose"][expose_id]
                     else:
-                        return None, False, f"Invalid parameter for expose id {expose_id}, cannot set value"
+                        # set the value property by default even if it does not exist
+                        # may be hidden field
+                        workflow_copy[key]["inputs"]["value"] = request["expose"][expose_id]
 
         return workflow_copy, True, "Workflow validated and prepared"
     

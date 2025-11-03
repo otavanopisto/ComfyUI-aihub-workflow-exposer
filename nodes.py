@@ -198,7 +198,7 @@ class AIHubExposeProjectConfigInteger:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "id": ("STRING", {"default": "boolean", "tooltip": "A unique custom id for this workflow."}),
+                "id": ("STRING", {"default": "integer", "tooltip": "A unique custom id for this workflow."}),
                 "field": ("STRING", {"default": "my-field", "tooltip": "The field to expose, use dots for entering sublevels"}),
                 "default": ("INT", {"default": 0, "min": -2147483648, "max": 2147483647, "tooltip": "The default value of the field"}),
             },
@@ -295,7 +295,7 @@ class AIHubExposeProjectConfigFloat:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "id": ("STRING", {"default": "boolean", "tooltip": "A unique custom id for this workflow."}),
+                "id": ("STRING", {"default": "float", "tooltip": "A unique custom id for this workflow."}),
                 "field": ("STRING", {"default": "my-field", "tooltip": "The field to expose, use dots for entering sublevels"}),
                 "default": ("FLOAT", {"default": 0.0, "min": -1.0e+20, "max": 1.0e+20, "tooltip": "The default value of the field"}),
             },
@@ -408,7 +408,7 @@ class AIHubExposeProjectConfigString:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "id": ("STRING", {"default": "boolean", "tooltip": "A unique custom id for this workflow."}),
+                "id": ("STRING", {"default": "string", "tooltip": "A unique custom id for this workflow."}),
                 "field": ("STRING", {"default": "my-field", "tooltip": "The field to expose, use dots for entering sublevels"}),
                 "default": ("STRING", {"default": "", "tooltip": "The default value of the field"}),
             },
@@ -584,6 +584,7 @@ class AIHubExposeImage:
                     "upload",
                 ], {"default": "upload", "tooltip": "The source of the image"}),
                 "index": ("INT", {"default": 0, "tooltip": "This value is used for sorting the input fields when displaying; lower values will appear first."}),
+                "optional": ("BOOLEAN", {"default": False, "tooltip": "If set to true, it will not raise an error if the image is not found"}),
             },
             "hidden": {
                 "pos_x": ("INT", {"default": 0, "tooltip": "The X position of the layer in the canvas"}),
@@ -593,11 +594,11 @@ class AIHubExposeImage:
             },
         }
 
-    def get_exposed_image(self, id, label, tooltip, type, index, pos_x=0, pos_y=0, layer_id="", local_file=None):
+    def get_exposed_image(self, id, label, tooltip, type, index, optional, pos_x=0, pos_y=0, layer_id="", local_file=None):
         image = None
         mask = None
         if local_file is not None:
-            if (os.path.exists(local_file)):
+            if (local_file and os.path.exists(local_file)):
                 # Instantiate a LoadImage node and use its logic to load the file
                 loader = LoadImage()
                 # The load_image method returns a tuple, so we need to get the first element
@@ -607,9 +608,11 @@ class AIHubExposeImage:
                 # comfyui has a bug where masks are inverted, so we need to invert it back
                 if mask is not None:
                     mask = 1.0 - mask
-            else:
+            elif not optional:
                 filenameOnly = os.path.basename(local_file)
                 raise ValueError(f"Error: Image file not found: {filenameOnly}")
+            else:
+                return (None, None, 0, 0, None, 0, 0,)
         else:
             raise ValueError("You must specify the local_file for this node to function")
 
@@ -636,11 +639,12 @@ class AIHubExposeFrame:
                 "label": ("STRING", {"default": "Frame", "tooltip": "This is the label that will appear in the field."}),
                 "tooltip": ("STRING", {"default": "", "tooltip": "An optional tooltip"}),
                 "frame_index_type": ([
-                    "relative",
+                    "relative_to_current",
                     "absolute",
-                ], {"default": "relative", "tooltip": "The index type of the frame"}),
+                ], {"default": "relative_to_current", "tooltip": "The index type of the frame"}),
                 "frame_index": ("INT", {"default": 0, "tooltip": "The index of the frame to expose, it gets affected by relative or absolute type, note that if out of bounds it will clamp to the nearest valid frame"}),
                 "index": ("INT", {"default": 0, "tooltip": "This value is used for sorting the input fields when displaying; lower values will appear first."}),
+                "optional": ("BOOLEAN", {"default": False, "tooltip": "If set to true, it will not raise an error if the frame is not found"}),
             },
             "hidden": {
                 "frame": ("INT", {"default": 0, "tooltip": "The actual frame number in the video"}),
@@ -649,18 +653,20 @@ class AIHubExposeFrame:
             },
         }
     
-    def get_exposed_frame(self, id, label, tooltip, frame_index_type, frame_index, index, frame=0, total_frames=1, local_file=None):
+    def get_exposed_frame(self, id, label, tooltip, frame_index_type, frame_index, index, optional, frame=0, total_frames=1, local_file=None):
         image = None
         if local_file is not None:
-            if (os.path.exists(local_file)):
+            if (os.path.exists(local_file) and local_file):
                 # Instantiate a LoadImage node and use its logic to load the file
                 loader = LoadImage()
                 # The load_image method returns a tuple, so we need to get the first element
                 loaded_image_tuple = loader.load_image(local_file)
                 image = loaded_image_tuple[0]
-            else:
+            elif not optional:
                 filenameOnly = os.path.basename(local_file)
                 raise ValueError(f"Error: Image file not found: {filenameOnly}")
+            else:
+                return (None, 0, 0, 0, 0,)
         else:
             raise ValueError("You must specify the local_file for this node to function")
 
@@ -685,17 +691,18 @@ class AIHubExposeProjectImage:
             "required": {
                 "id": ("STRING", {"default": "exposed_image", "tooltip": "A unique custom ID for this workflow."}),
                 "file_name": ("STRING", {"default": "image.png", "tooltip": "The name of the image as stored in the project files, including extension"}),
+                "optional": ("BOOLEAN", {"default": False, "tooltip": "If set to true, it will not raise an error if the image is not found"}),
             },
             "hidden": {
                 "local_file": ("STRING",),
             },
         }
 
-    def get_exposed_image(self, id, file_name, local_file=None):
+    def get_exposed_image(self, id, file_name, optional, local_file=None):
         image = None
         mask = None
         if local_file is not None:
-            if (os.path.exists(local_file)):
+            if (os.path.exists(local_file) and local_file):
                 # Instantiate a LoadImage node and use its logic to load the file
                 loader = LoadImage()
                 # The load_image method returns a tuple, so we need to get the first element
@@ -705,9 +712,11 @@ class AIHubExposeProjectImage:
                 # comfyui has a bug where masks are inverted, so we need to invert it back
                 if mask is not None:
                     mask = 1.0 - mask
-            else:
+            elif not optional:
                 filenameOnly = os.path.basename(local_file)
                 raise ValueError(f"Error: Image file not found: {filenameOnly}")
+            else:
+                return (None, None, 0, 0,)
         else:
             raise ValueError("You must specify the local_file for this node to function")
 
@@ -742,6 +751,7 @@ class AIHubExposeImageInfoOnly:
                     "upload",
                 ], {"default": "upload", "tooltip": "The source of the image"}),
                 "index": ("INT", {"default": 0, "tooltip": "This value is used for sorting the input fields when displaying; lower values will appear first."}),
+                "optional": ("BOOLEAN", {"default": False, "tooltip": "If set to true, it will not raise an error if the image is not found"}),
             },
             "hidden": {
                 "pos_x": ("INT", {"default": 0, "tooltip": "The X position of the layer in the canvas"}),
@@ -752,7 +762,7 @@ class AIHubExposeImageInfoOnly:
             }
         }
 
-    def get_exposed_image_info_only(self, id, label, tooltip, type, index, pos_x=0, pos_y=0, layer_id="", value_width=1024, value_height=1024):
+    def get_exposed_image_info_only(self, id, label, tooltip, type, index, optional, pos_x=0, pos_y=0, layer_id="", value_width=1024, value_height=1024):
         return (pos_x, pos_y, layer_id, value_width, value_height,)
     
 class AIHubExposeImageBatch:
@@ -817,6 +827,11 @@ class AIHubExposeImageBatch:
                     raise ValueError(f"Error: {id} contains too many files")
                 if len(metadata_parsed) != len(filenames):
                     raise ValueError(f"Error: {id} the number of files does not match the number of metadata entries")
+                if len(filenames) < minlen:
+                    raise ValueError(f"Error: {id} does not contain enough files")
+                
+                if len(filenames) == 0:
+                    return (None, None, [], 0, 0,)
 
                 metadata_fields_list = [line.strip() for line in metadata_fields.split("\n") if line.strip()]
                 true_booleans = []
@@ -986,6 +1001,9 @@ class AIHubExposeProjectImageBatch:
                 filenames = json.loads(local_files)
                 if not isinstance(filenames, list):
                     raise ValueError("Error: local_files is not a valid JSON string encoding an array")
+                
+                if len(filenames) == 0:
+                    return (None, None, 0, 0,)
                 
                 loaded_images = []
                 loaded_masks = []
@@ -1178,13 +1196,14 @@ class AIHubExposeProjectText:
                 "id": ("STRING", {"default": "exposed_text", "tooltip": "A unique custom id for this workflow."}),
                 "file_name": ("STRING", {"default": "text.txt", "tooltip": "The name of the text file as stored in the project files, including extension"}),
                 "batch_index": ("STRING", {"default": "", "tooltip": "If the file belongs to a batch, the index of the latent to load, it must be a single integer, and it can be negative to count from the end"}),
+                "optional": ("BOOLEAN", {"default": False, "tooltip": "If set to true, it will not raise an error if the text is not found"})
             },
             "hidden": {
                 "local_file": ("STRING", {"default": "", "tooltip": "A local file to load the text from, if given this will be used instead of loading from file"}),
             }
         }
 
-    def get_exposed_text(self, id, file_name, batch_index, local_file=None):
+    def get_exposed_text(self, id, file_name, batch_index, optional, local_file=None):
         text = None
         if local_file is not None and local_file.strip() != "":
             if (os.path.exists(local_file)):
@@ -1193,8 +1212,10 @@ class AIHubExposeProjectText:
             else:
                 filenameOnly = os.path.basename(local_file)
                 raise ValueError(f"Error: Text file not found: {filenameOnly}")
-        else:
+        elif not optional:
             raise ValueError("You must specify the local_file of the text for this node to function")
+        else:
+            return ("" ,)
 
         return (text,)
 
@@ -1208,8 +1229,8 @@ class AIHubExposeProjectVideo:
     CATEGORY = "aihub/expose"
     FUNCTION = "get_exposed_video"
 
-    RETURN_TYPES = ("VIDEO",)
-    RETURN_NAMES = ("VIDEO",)
+    RETURN_TYPES = ("VIDEO", "STRING")
+    RETURN_NAMES = ("VIDEO", "LOCAL_FILE")
 
     @classmethod
     def INPUT_TYPES(s):
@@ -1218,24 +1239,31 @@ class AIHubExposeProjectVideo:
                 "id": ("STRING", {"default": "exposed_video", "tooltip": "A unique custom id for this workflow."}),
                 "file_name": ("STRING", {"default": "video.mp4", "tooltip": "The name of the video file as stored in the project files, including extension"}),
                 "batch_index": ("STRING", {"default": "", "tooltip": "If the file belongs to a batch, the index of the latent to load, it must be a single integer, and it can be negative to count from the end"}),
+                "do_not_process": ("BOOLEAN", {"default": False, "tooltip": "If set to true, the video will not be processed by the node and you will have to handle it manually"}),
+                "optional": ("BOOLEAN", {"default": False, "tooltip": "If set to true, it will not raise an error if the video is not found"})
             },
             "hidden": {
                 "local_file": ("STRING", {"default": "", "tooltip": "A local file to load the video from, if given this will be used instead of loading from file"}),
             }
         }
 
-    def get_exposed_video(self, id, file_name, batch_index, local_file=None):
+    def get_exposed_video(self, id, file_name, batch_index, do_not_process=False, optional=False, local_file=None):
         video_object = None
         if local_file is not None and local_file.strip() != "":
             if (os.path.exists(local_file)):
-                video_object = InputImpl.VideoFromFile(local_file)
+                if do_not_process:
+                    video_object = None
+                else:
+                    video_object = InputImpl.VideoFromFile(local_file)
             else:
                 filenameOnly = os.path.basename(local_file)
                 raise ValueError(f"Error: Video file not found: {filenameOnly}")
-        else:
+        elif not optional:
             raise ValueError("You must specify the local_file of the video for this node to function")
+        else:
+            return (None, None)
 
-        return (video_object,)
+        return (video_object, local_file)
     
 class AIHubExposeVideo:
     """
@@ -1247,8 +1275,8 @@ class AIHubExposeVideo:
     CATEGORY = "aihub/expose"
     FUNCTION = "get_exposed_video"
 
-    RETURN_TYPES = ("VIDEO", "STRING")
-    RETURN_NAMES = ("VIDEO", "SEGMENT_ID")
+    RETURN_TYPES = ("VIDEO", "STRING", "STRING")
+    RETURN_NAMES = ("VIDEO", "LOCAL_FILE", "SEGMENT_ID")
 
     @classmethod
     def INPUT_TYPES(s):
@@ -1259,6 +1287,8 @@ class AIHubExposeVideo:
                 "tooltip": ("STRING", {"default": "", "tooltip": "An optional tooltip"}),
                 "type": (["current_segment", "merged_video", "upload"], {"default": "upload", "tooltip": "The source of the video"}),
                 "index": ("INT", {"default": 0, "tooltip": "This value is used for sorting the input fields when displaying; lower values will appear first."}),
+                "do_not_process": ("BOOLEAN", {"default": False, "tooltip": "If set to true, the video will not be processed by the node and you will have to handle it manually" }),
+                "optional": ("BOOLEAN", {"default": False, "tooltip": "If set to true, it will not raise an error if the video is not found"})
             },
             "hidden": {
                 "segment_id": ("STRING", {"default": "", "tooltip": "The segment id of the video layer"}),
@@ -1266,18 +1296,23 @@ class AIHubExposeVideo:
             }
         }
 
-    def get_exposed_video(self, id, label, tooltip, type, index, segment_id="", local_file=None):
+    def get_exposed_video(self, id, label, tooltip, type, index, do_not_process, optional, segment_id="", local_file=None):
         video_object = None
         if local_file is not None and local_file.strip() != "":
             if (os.path.exists(local_file)):
-                video_object = InputImpl.VideoFromFile(local_file)
+                if do_not_process:
+                    video_object = None
+                else:
+                    video_object = InputImpl.VideoFromFile(local_file)
             else:
                 filenameOnly = os.path.basename(local_file)
                 raise ValueError(f"Error: Video file not found: {filenameOnly}")
-        else:
+        elif not optional:
             raise ValueError("You must specify the local_file of the video for this node to function")
+        else:
+            return (None, None, None,)
 
-        return (video_object, segment_id)
+        return (video_object, local_file, segment_id, )
 
 class AIHubExposeProjectAudio:
     """
@@ -1286,7 +1321,8 @@ class AIHubExposeProjectAudio:
     CATEGORY = "aihub/expose"
     FUNCTION = "get_exposed_audio"
 
-    RETURN_TYPES = ("AUDIO",)
+    RETURN_TYPES = ("AUDIO", "STRING")
+    RETURN_NAMES = ("AUDIO", "LOCAL_FILE")
 
     @classmethod
     def INPUT_TYPES(s):
@@ -1295,25 +1331,32 @@ class AIHubExposeProjectAudio:
                 "id": ("STRING", {"default": "exposed_audio", "tooltip": "A unique custom id for this workflow."}),
                 "file_name": ("STRING", {"default": "audio.mp3", "tooltip": "The name of the audio file as stored in the project files, including extension"}),
                 "batch_index": ("STRING", {"default": "", "tooltip": "If the file belongs to a batch, the index of the latent to load, it must be a single integer, and it can be negative to count from the end"}),
+                "do_not_process": ("BOOLEAN", {"default": False, "tooltip": "If set to true, the video will not be processed by the node and you will have to handle it manually" }),
+                "optional": ("BOOLEAN", {"default": False, "tooltip": "If set to true, it will not raise an error if the audio is not found"})
             },
             "hidden": {
                 "local_file": ("STRING", {"default": "", "tooltip": "A local file to load the audio from, if given this will be used instead of loading from file"}),
             }
         }
 
-    def get_exposed_audio(self, id, file_name, batch_index, local_file=None):
+    def get_exposed_audio(self, id, file_name, batch_index, do_not_process, optional, local_file=None):
         audio = None
         if local_file is not None and local_file.strip() != "":
             if (os.path.exists(local_file)):
                 # The load_audio method returns a tuple, so we need to get the first element
-                waveform, sample_rate = load_audio_file(local_file)
-                audio = {"waveform": waveform.unsqueeze(0), "sample_rate": sample_rate}
+                if do_not_process:
+                    audio = None
+                else:
+                    waveform, sample_rate = load_audio_file(local_file)
+                    audio = {"waveform": waveform.unsqueeze(0), "sample_rate": sample_rate}
             else:
                 filenameOnly = os.path.basename(local_file)
                 raise ValueError(f"Error: Audio file not found: {filenameOnly}")
-        else:
+        elif not optional:
             raise ValueError("You must specify the local_file of the audio for this node to function")
-        return (audio,)
+        else:
+            return (None, None)
+        return (audio, local_file)
     
 class AIHubExposeAudio:
     """
@@ -1322,8 +1365,8 @@ class AIHubExposeAudio:
     CATEGORY = "aihub/expose"
     FUNCTION = "get_exposed_audio"
 
-    RETURN_TYPES = ("AUDIO", "STRING")
-    RETURN_NAMES = ("AUDIO", "SEGMENT_ID")
+    RETURN_TYPES = ("AUDIO", "STRING", "STRING")
+    RETURN_NAMES = ("AUDIO", "LOCAL_FILE", "SEGMENT_ID")
 
     @classmethod
     def INPUT_TYPES(s):
@@ -1334,6 +1377,8 @@ class AIHubExposeAudio:
                 "tooltip": ("STRING", {"default": "", "tooltip": "An optional tooltip"}),
                 "type": (["current_segment", "merged_audio", "upload"], {"default": "upload", "tooltip": "The source of the audio"}),
                 "index": ("INT", {"default": 0, "tooltip": "This value is used for sorting the input fields when displaying; lower values will appear first."}),
+                "do_not_process": ("BOOLEAN", {"default": False, "tooltip": "If set to true, the audio will not be processed by the node and you will have to handle it manually" }),
+                "optional": ("BOOLEAN", {"default": False, "tooltip": "If set to true, it will not raise an error if the audio is not found"})
             },
             "hidden": {
                 "segment_id": ("STRING", {"default": "", "tooltip": "The segment id of the audio layer"}),
@@ -1341,19 +1386,24 @@ class AIHubExposeAudio:
             }
         }
 
-    def get_exposed_audio(self, id, label, tooltip, type, index, segment_id="", local_file=None):
+    def get_exposed_audio(self, id, label, tooltip, type, index, do_not_process, optional, segment_id="", local_file=None):
         audio = None
         if local_file is not None and local_file.strip() != "":
             if (os.path.exists(local_file)):
                 # The load_audio method returns a tuple, so we need to get the first element
-                waveform, sample_rate = load_audio_file(local_file)
-                audio = {"waveform": waveform.unsqueeze(0), "sample_rate": sample_rate}
+                if do_not_process:
+                    audio = None
+                else:
+                    waveform, sample_rate = load_audio_file(local_file)
+                    audio = {"waveform": waveform.unsqueeze(0), "sample_rate": sample_rate}
             else:
                 filenameOnly = os.path.basename(local_file)
                 raise ValueError(f"Error: Audio file not found: {filenameOnly}")
-        else:
+        elif not optional:
             raise ValueError("You must specify the local_file of the audio for this node to function")
-        return (audio, segment_id)
+        else:
+            return (None, None, None,)
+        return (audio, local_file, segment_id)
 
 class AIHubExposeProjectLatent:
     """
@@ -1370,13 +1420,14 @@ class AIHubExposeProjectLatent:
                 "id": ("STRING", {"default": "exposed_latent", "tooltip": "A unique custom id for this workflow."}),
                 "file_name": ("STRING", {"default": "latent.safetensors", "tooltip": "The name of the latent file as stored in the project files, including extension"}),
                 "batch_index": ("STRING", {"default": "", "tooltip": "If the file belongs to a batch, the index of the latent to load, it must be a single integer, and it can be negative to count from the end"}),
+                "optional": ("BOOLEAN", {"default": False, "tooltip": "If set to true, it will not raise an error if the latent is not found"})
             },
             "hidden": {
                 "local_file": ("STRING", {"default": "", "tooltip": "A local file to load the latent from, if given this will be used instead of loading from file"}),
             }
         }
     
-    def get_exposed_latent(self, id, file_name, batch_index, local_file=None):
+    def get_exposed_latent(self, id, file_name, batch_index, optional, local_file=None):
         samples = None
         if local_file is not None and local_file.strip() != "":
             if (os.path.exists(local_file)):
@@ -1388,8 +1439,52 @@ class AIHubExposeProjectLatent:
             else:
                 filenameOnly = os.path.basename(local_file)
                 raise ValueError(f"Error: Latent file not found: {filenameOnly}")
-        else:
+        elif not optional:
             raise ValueError("You must specify the local_file of the latent for this node to function")
+        else:
+            return (None, )
+        return (samples,)
+    
+class AIHubExposeLatent:
+    """
+    An utility to expose latent files to be used in the workflow
+    """
+    CATEGORY = "aihub/expose"
+    FUNCTION = "get_exposed_latent"
+    RETURN_TYPES = ("LATENT",)
+    RETURN_NAMES = ("LATENT",)
+
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "id": ("STRING", {"default": "exposed_latent", "tooltip": "A unique custom ID for this workflow."}),
+                "label": ("STRING", {"default": "Latent", "tooltip": "This is the label that will appear in the field."}),
+                "tooltip": ("STRING", {"default": "", "tooltip": "An optional tooltip"}),
+                "index": ("INT", {"default": 0, "tooltip": "This value is used for sorting the input fields when displaying; lower values will appear first."}),
+                "optional": ("BOOLEAN", {"default": False, "tooltip": "If set to true, it will not raise an error if the latent is not found"})
+            },
+            "hidden": {
+                "local_file": ("STRING", {"default": "", "tooltip": "A local file to load the latent from, if given this will be used instead of loading from file"}),
+            }
+        }
+    
+    def get_exposed_latent(self, id, label, tooltip, index, optional, local_file=None):
+        samples = None
+        if local_file is not None and local_file.strip() != "":
+            if (os.path.exists(local_file)):
+                latent = safetensors.torch.load_file(local_file, device="cpu")
+                multiplier = 1.0
+                if "latent_format_version_0" not in latent:
+                    multiplier = 1.0 / 0.18215
+                samples = {"samples": latent["latent_tensor"].float() * multiplier}
+            else:
+                filenameOnly = os.path.basename(local_file)
+                raise ValueError(f"Error: Latent file not found: {filenameOnly}")
+        elif not optional:
+            raise ValueError("You must specify the local_file of the latent for this node to function")
+        else:
+            return (None, )
         return (samples,)
 
 ## Actions
@@ -1411,6 +1506,7 @@ class AIHubActionNewImage:
             "optional": {
                 "mask": ("MASK",),
                 "file_name": ("STRING", {"default": "", "tooltip": "The filename to use, if not given the name value will be used with a .png extension"}),
+                "autoopen": ("BOOLEAN", {"default": False, "tooltip": "If set to true, the image will be automatically opened in a new tab when added"}),
             }
         }
     
@@ -1418,7 +1514,10 @@ class AIHubActionNewImage:
     def IS_CHANGED(cls, **kwargs):
         return float("NaN")
     
-    def run_action(self, image, action, name, mask=None, file_name=""):
+    def run_action(self, image, action, name, mask=None, file_name="", autoopen=False):
+        if image is None:
+            return (None, None)
+
         if not file_name:
             file_name = name
             if not file_name.lower().endswith(".png"):
@@ -1451,6 +1550,7 @@ class AIHubActionNewImage:
                 "file_action": action,
                 "file_name": file_name,
                 "name": name,
+                "autoopen": autoopen,
             },
         )
 
@@ -1482,6 +1582,9 @@ class AIHubActionNewImageBatch:
         }
 
     def run_action(self, images, action, name, masks=None, file_name=""):
+        if images is None or images.shape[0] == 0:
+            return (images,)
+
         if not file_name:
             file_name = name
             if not file_name.lower().endswith(".png"):
@@ -1501,13 +1604,6 @@ class AIHubActionNewImageBatch:
         c_images = images
         # we have to convert this image to bytes and apply the mask if the mask is given
         for j in range(c_images.shape[0]):
-            # first we need to get the basename and the extension if any provided
-            base_name, ext = os.path.splitext(name)
-            # we don't use the extension, we always save as png
-            file_name = base_name + ".png"
-            # replace spaces with underscores
-            file_name = file_name.replace(" ", "_")
-
             c_image = c_images[j]
             c_mask = masks[j] if masks is not None else None
 
@@ -1576,6 +1672,9 @@ class AIHubActionNewFrames:
     def run_action(self, images, action, name, insert_index, insert_action, file_name=""):
         AIHubActionNewImageBatch().run_action(images, action, name, None, file_name)
 
+        if images is None or images.shape[0] == 0:
+            return (images,)
+
         if not file_name:
             file_name = name
             if not file_name.lower().endswith(".png"):
@@ -1594,6 +1693,8 @@ class AIHubActionNewFrames:
                 "insert_action": insert_action,
             }
         )
+
+        return (images,)
     
 class AIHubActionNewLayer:
     CATEGORY = "aihub/actions"
@@ -1626,6 +1727,9 @@ class AIHubActionNewLayer:
         }
 
     def run_action(self, image, pos_x, pos_y, reference_layer_id, reference_layer_action, name, action="REPLACE", mask=None, file_name=""):
+        if image is None:
+            return (None, None)
+
         if not file_name:
             file_name = name
             if not file_name.lower().endswith(".png"):
@@ -1694,6 +1798,9 @@ class AIHubActionSetProjectConfigInteger:
         }
 
     def run_action(self, field, value):
+        if value is None:
+            value = 0
+
         SERVER.send_json_to_current_client_sync(
             {
                 "type": "SET_CONFIG_VALUE",
@@ -1729,6 +1836,9 @@ class AIHubActionSetProjectConfigFloat:
         }
 
     def run_action(self, field, value):
+        if value is None:
+            value = 0.0
+
         SERVER.send_json_to_current_client_sync(
             {
                 "type": "SET_CONFIG_VALUE",
@@ -1763,6 +1873,9 @@ class AIHubActionSetProjectConfigBoolean:
         }
 
     def run_action(self, field, value):
+        if value is None:
+            value = False
+
         SERVER.send_json_to_current_client_sync(
             {
                 "type": "SET_CONFIG_VALUE",
@@ -1798,6 +1911,9 @@ class AIHubActionSetProjectConfigString:
         }
 
     def run_action(self, field, value):
+        if value is None:
+            value = ""
+
         SERVER.send_json_to_current_client_sync(
             {
                 "type": "SET_CONFIG_VALUE",
@@ -1830,6 +1946,9 @@ class AIHubActionNewLatent:
     FUNCTION = "run_action"
 
     def run_action(self, samples, action, file_name, prompt=None, extra_pnginfo=None):
+        if not samples:
+            return ()
+        
         # support save metadata for latent sharing
         prompt_info = ""
         if prompt is not None:
@@ -1878,6 +1997,7 @@ class AIHubActionNewAudio:
             "optional": {
                 "format": (["wav", "ogg", "flac"], {"default": "wav", "tooltip": "The format to save the audio in"}),
                 "file_name": ("STRING", {"default": "", "tooltip": "The filename to use, with the extension, if not given the name value will be used with the given format extension"}),
+                "autoplay": ("BOOLEAN", {"default": False, "tooltip": "If true, the audio will autoplay when added"}),
             }
         }
     
@@ -1886,7 +2006,10 @@ class AIHubActionNewAudio:
     RETURN_TYPES = ()
     FUNCTION = "run_action"
 
-    def run_action(self, audio, action, name, format="wav", file_name=""):
+    def run_action(self, audio, action, name, format="wav", file_name="", autoplay=False):
+        if not audio:
+            return ()
+        
         if not file_name:
             file_name = name
             if not file_name.lower().endswith(f".{format}"):
@@ -1907,6 +2030,7 @@ class AIHubActionNewAudio:
                 "file_action": action,
                 "name": name,
                 "type": f"audio/{format}",
+                "autoplay": autoplay,
             }
         )
         return ()
@@ -1929,6 +2053,7 @@ class AIHubActionNewAudioSegment:
             "optional": {
                 "format": (["wav", "ogg", "flac"], {"default": "wav", "tooltip": "The format to save the audio in"}),
                 "file_name": ("STRING", {"default": "", "tooltip": "The filename to use, with the extension, if not given the name value will be used with the given format extension"}),
+                "autoplay": ("BOOLEAN", {"default": False, "tooltip": "If true, the audio segment will autoplay when added"}),
             }
         }
     
@@ -1937,7 +2062,10 @@ class AIHubActionNewAudioSegment:
     RETURN_TYPES = ()
     FUNCTION = "run_action"
 
-    def run_action(self, audio, action, name, reference_segment_id, reference_segment_action, format="wav", file_name=""):
+    def run_action(self, audio, action, name, reference_segment_id, reference_segment_action, format="wav", file_name="", autoplay=False):
+        if not audio:
+            return ()
+        
         if not file_name:
             file_name = name
             if not file_name.lower().endswith(f".{format}"):
@@ -1960,6 +2088,7 @@ class AIHubActionNewAudioSegment:
                 "type": f"audio/{format}",
                 "reference_segment_id": reference_segment_id,
                 "reference_segment_action": reference_segment_action,
+                "autoplay": autoplay,
             }
         )
         return ()
@@ -1982,6 +2111,7 @@ class AIHubActionNewVideo:
             },
             "optional": {
                 "file_name": ("STRING", {"default": "", "tooltip": "The filename to use, with the extension"}),
+                "autoplay": ("BOOLEAN", {"default": False, "tooltip": "If true, the video will autoplay when added"}),
             }
         }
     
@@ -1990,7 +2120,10 @@ class AIHubActionNewVideo:
     RETURN_TYPES = ()
     FUNCTION = "run_action"
 
-    def run_action(self, video, action, name, format, codec, crf, file_name=""):
+    def run_action(self, video, action, name, format, codec, crf, file_name="", autoplay=False):
+        if not video:
+            return ()
+        
         if not file_name:
             file_name = name
             extension = Types.VideoContainer.get_extension(format)
@@ -2010,6 +2143,7 @@ class AIHubActionNewVideo:
                 "file_action": action,
                 "name": name,
                 "type": mime_type,
+                "autoplay": autoplay,
             }
         )
         return ()
@@ -2034,6 +2168,7 @@ class AIHubActionNewVideoSegment:
             },
             "optional": {
                 "file_name": ("STRING", {"default": "", "tooltip": "The filename to use, with the extension, if not given the name value will be used with the given format extension based on the mime type"}),
+                "autoplay": ("BOOLEAN", {"default": False, "tooltip": "If true, the video segment will autoplay when added"}),
             }
         }
     
@@ -2042,7 +2177,10 @@ class AIHubActionNewVideoSegment:
     RETURN_TYPES = ()
     FUNCTION = "run_action"
 
-    def run_action(self, video, action, name, format, codec, crf, reference_segment_id, reference_segment_action, file_name=""):
+    def run_action(self, video, action, name, format, codec, crf, reference_segment_id, reference_segment_action, file_name="", autoplay=False):
+        if not video:
+            return ()
+        
         if not file_name:
             file_name = name
             extension = Types.VideoContainer.get_extension(format)
@@ -2064,6 +2202,7 @@ class AIHubActionNewVideoSegment:
                 "type": mime_type,
                 "reference_segment_id": reference_segment_id,
                 "reference_segment_action": reference_segment_action,
+                "autoplay": autoplay,
             }
         )
 
@@ -2092,6 +2231,9 @@ class AIHubActionNewText:
     FUNCTION = "run_action"
 
     def run_action(self, text, action, name, mime_type="text/plain", file_name=""):
+        if not text:
+            return ()
+        
         if not file_name:
             file_name = name
             mime_type_splitted = mime_type.split("/")

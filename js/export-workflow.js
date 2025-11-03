@@ -273,9 +273,14 @@ function validateWorkflow(exported, modelsAndLoras) {
             // batch_index is a string, check if that string value is a valid integer
             const batchIndex = node.inputs.batch_index;
             if (batchIndex && isNaN(parseInt(batchIndex))) {
-                const dialog = new ComfyDialog()
-                dialog.show("Validation Error: The batch_index value in node " + nodeIdValue + " is not a valid integer");
-                return false;
+                // check that it is a variable name of sorts, can have a sign + or - at the start
+                const variableName = batchIndex.trim();
+                const variableNameRegex = /^[+-]?[a-zA-Z0-9\-\._]*$/;
+                if (!variableNameRegex.test(variableName)) {
+                    const dialog = new ComfyDialog()
+                    dialog.show("Validation Error: The batch_index value in node " + nodeIdValue + " is not a valid integer or variable name: " + batchIndex);
+                    return false;
+                }
             }
         }
 
@@ -293,9 +298,14 @@ function validateWorkflow(exported, modelsAndLoras) {
                     }
                     for (const rangePart of rangeParts) {
                         if (isNaN(parseInt(rangePart))) {
-                            const dialog = new ComfyDialog()
-                            dialog.show("Validation Error: The indexes value in node " + nodeIdValue + " is not a valid integer");
-                            return false;
+                            // check that it is a variable name of sorts, can have a sign + or - at the start
+                            const variableName = rangePart.trim();
+                            const variableNameRegex = /^[+-]?[a-zA-Z0-9\-\._]*$/;
+                            if (!variableNameRegex.test(variableName)) {
+                                const dialog = new ComfyDialog()
+                                dialog.show("Validation Error: The indexes value in node " + nodeIdValue + " is not a valid integer or variable name: " + rangePart);
+                                return false;
+                            }
                         }
                     }
                 }
@@ -307,7 +317,8 @@ function validateWorkflow(exported, modelsAndLoras) {
             const fileName = node.inputs.file_name;
             if (fileName) {
                 const regex = /^[a-zA-Z_\-\.]+$/;
-                if (!regex.test(fileName)) {
+                const baseNameOnly = fileName.split(".")[0];
+                if (!regex.test(baseNameOnly)) {
                     const dialog = new ComfyDialog()
                     // may not have nodeIdValue set because Action nodes do not require an id
                     if (typeof nodeIdValue === "undefined" || nodeIdValue === null || nodeIdValue === "") {
