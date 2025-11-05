@@ -642,7 +642,7 @@ class AIHubExposeFrame:
                     "relative_to_current",
                     "absolute",
                 ], {"default": "relative_to_current", "tooltip": "The index type of the frame"}),
-                "frame_index": ("INT", {"default": 0, "tooltip": "The index of the frame to expose, it gets affected by relative or absolute type, note that if out of bounds it will clamp to the nearest valid frame"}),
+                "frame_index": ("INT", {"default": 0, "tooltip": "The index of the frame to expose, it gets affected by relative or absolute type, note that if out of bounds it will clamp to the nearest valid frame", "min": -100000, "max": 100000}),
                 "index": ("INT", {"default": 0, "tooltip": "This value is used for sorting the input fields when displaying; lower values will appear first."}),
                 "optional": ("BOOLEAN", {"default": False, "tooltip": "If set to true, it will not raise an error if the frame is not found"}),
             },
@@ -1662,7 +1662,7 @@ class AIHubActionNewFrames:
                 "action": (["REPLACE", "APPEND"], {"default": "REPLACE", "tooltip": "This is a file level action for file storage, if append is selected, the images will be added to existing ones, if replace is selected, existing images will be replaced"}),
                 "name": ("STRING", {"default": "new image batch", "tooltip": "The name of the images to be used as filenames, a number will be added to each image to make it unique"}),
                 "insert_index": ("INT", {"default": -1, "tooltip": "The starting index for the frames, where to place them, negative indexes are allowed to insert at the end","min": -2147483648, "max": 2147483647}),
-                "insert_action": (["REPLACE", "APPEND", {"default": "REPLACE", "tooltip": "The action to execute on the video frames themselves that are being worked on"}])
+                "insert_action": (["REPLACE", "APPEND"], {"default": "REPLACE", "tooltip": "The action to execute on the video frames themselves that are being worked on"})
             },
             "optional": {
                 "file_name": ("STRING", {"default": "", "tooltip": "The filename to use as base extension included, if not given the name value will be used with a .png extension"}),
@@ -2231,7 +2231,7 @@ class AIHubActionNewText:
     FUNCTION = "run_action"
 
     def run_action(self, text, action, name, mime_type="text/plain", file_name=""):
-        if not text:
+        if text is None:
             return ()
         
         if not file_name:
