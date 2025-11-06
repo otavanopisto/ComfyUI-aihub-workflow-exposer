@@ -1689,7 +1689,7 @@ class AIHubActionNewFrames:
                 "name": name,
                 "file_action": action,
                 "count": images.shape[0],
-                "insert_index": insert_index,
+                "insert_index": int(insert_index),
                 "insert_action": insert_action,
             }
         )
