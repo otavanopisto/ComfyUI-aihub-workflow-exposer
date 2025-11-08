@@ -1534,7 +1534,10 @@ class AIHubActionNewImage:
             alpha_channel = Image.fromarray((mask_np * 255).clip(0, 255).astype(np.uint8), mode='L')
             i = 255. * c_image.cpu().numpy()
             img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
-            img.putalpha(alpha_channel)
+            try:
+                img.putalpha(alpha_channel)
+            except Exception as e:
+                print(f"Error adding alpha channel: {e}")
         else:
             i = 255. * c_image.cpu().numpy()
             img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
@@ -1613,7 +1616,10 @@ class AIHubActionNewImageBatch:
                 alpha_channel = Image.fromarray((mask_np * 255).clip(0, 255).astype(np.uint8), mode='L')
                 i = 255. * c_image.cpu().numpy()
                 img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
-                img.putalpha(alpha_channel)
+                try:
+                    img.putalpha(alpha_channel)
+                except Exception as e:
+                    print(f"Error adding alpha channel: {e}")
             else:
                 i = 255. * c_image.cpu().numpy()
                 img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
@@ -1746,7 +1752,10 @@ class AIHubActionNewLayer:
             alpha_channel = Image.fromarray((mask_np * 255).clip(0, 255).astype(np.uint8), mode='L')
             i = 255. * c_image.cpu().numpy()
             img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
-            img.putalpha(alpha_channel)
+            try:
+                img.putalpha(alpha_channel)
+            except Exception as e:
+                print(f"Error adding alpha channel: {e}")
         else:
             i = 255. * c_image.cpu().numpy()
             img = Image.fromarray(np.clip(i, 0, 255).astype(np.uint8))
@@ -3047,7 +3056,8 @@ class AIHubMetaExportLora:
             "context": context,
             "description": description,
             "default_strength": default_strength,
-            "use_loader_model_only": use_loader_model_only
+            "use_loader_model_only": use_loader_model_only,
+            "name": name
         }
 
         if limit_to_family and limit_to_family.strip() != "":
@@ -3073,6 +3083,12 @@ class AIHubMetaExportLora:
         json_filename = id + ".json"
         with open(os.path.join(AIHUB_LORAS_DIR, json_filename), "w", encoding="utf-8") as f:
             json.dump(lora_JSON, f, indent=4)
+
+        # check if directory exists, if not create it
+        if not os.path.exists(AIHUB_LORAS_LOCALE_DIR):
+            os.makedirs(AIHUB_LORAS_LOCALE_DIR)
+        if not os.path.exists(os.path.join(AIHUB_LORAS_LOCALE_DIR, "default")):
+            os.makedirs(os.path.join(AIHUB_LORAS_LOCALE_DIR, "default"))
 
         with open(os.path.join(AIHUB_LORAS_LOCALE_DIR, "default", json_filename), "w", encoding="utf-8") as f:
             json.dump({"name": name, "description": description}, f, indent=4)
