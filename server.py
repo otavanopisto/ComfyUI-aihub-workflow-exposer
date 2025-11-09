@@ -16,7 +16,7 @@ from folder_paths import get_filename_list
 
 from aiohttp import web
 from server import PromptServer
-from execution import validate_prompt
+from execution import validate_prompt, SENSITIVE_EXTRA_DATA_KEYS
 
 from .aihub_env import AIHUB_DIR, AIHUB_LORAS_LOCALE_DIR, AIHUB_MODELS_DIR, AIHUB_LORAS_DIR, AIHUB_MODELS_LOCALE_DIR, AIHUB_WORKFLOWS_DIR, AIHUB_WORKFLOWS_LOCALE_DIR
 
@@ -1060,7 +1060,12 @@ class AIHubServer:
 
         number = PromptServer.instance.number
         PromptServer.instance.number += 1
-        PromptServer.instance.prompt_queue.put((number, self.CURRENTLY_RUNNING["id"], self.CURRENTLY_RUNNING["workflow"], {}, outputs_to_execute))
+        sensitive = {}
+        extra_data = self.CURRENTLY_RUNNING["request"].get("extra_data", {})
+        for sensitive_val in SENSITIVE_EXTRA_DATA_KEYS:
+            if sensitive_val in extra_data:
+                sensitive[sensitive_val] = extra_data.pop(sensitive_val)
+        PromptServer.instance.prompt_queue.put((number, self.CURRENTLY_RUNNING["id"], self.CURRENTLY_RUNNING["workflow"], extra_data, outputs_to_execute, sensitive))
         #else:
         #    await self.CURRENTLY_RUNNING["ws"].send_json({
         #        'type': 'ERROR',
