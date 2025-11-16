@@ -613,6 +613,8 @@ class AIHubExposeImage:
                 raise ValueError(f"Error: Image file not found: {filenameOnly}")
             else:
                 return (None, None, 0, 0, None, 0, 0,)
+        elif optional:
+            return (None, None, 0, 0, None, 0, 0,)
         else:
             raise ValueError("You must specify the local_file for this node to function")
 
@@ -667,6 +669,8 @@ class AIHubExposeFrame:
                 raise ValueError(f"Error: Image file not found: {filenameOnly}")
             else:
                 return (None, 0, 0, 0, 0,)
+        elif optional:
+            return (None, 0, 0, 0, 0,)
         else:
             raise ValueError("You must specify the local_file for this node to function")
 
@@ -717,6 +721,8 @@ class AIHubExposeProjectImage:
                 raise ValueError(f"Error: Image file not found: {filenameOnly}")
             else:
                 return (None, None, 0, 0,)
+        elif optional:
+            return (None, None, 0, 0,)
         else:
             raise ValueError("You must specify the local_file for this node to function")
 
@@ -1075,11 +1081,15 @@ class AIHubExposeModel:
                 "optional_vae": ("STRING", {"default": "", "tooltip": "The default for an optional VAE to load, if not given the VAE from the checkpoint will be used if available"}),
                 "optional_clip": ("STRING", {"default": "", "tooltip": "The default for an optional CLIP to load, if not given the CLIP from the checkpoint will be used if available"}),
                 "optional_clip_type": ("STRING", {"default": "", "tooltip": "The default for an optional CLIP to load, if not given the CLIP from the checkpoint will be used if available"}),
+
+                "optional_lora_prepend": ("STRING", {"default": "", "tooltip": "An optional string to prepend to the loras list, useful for programmatic addition of loras"}),
+                "optional_lora_prepend_strengths": ("STRING", {"default": "", "tooltip": "An optional string to prepend to the loras strengths list, useful for programmatic addition of loras"}),
+                "optional_lora_prepend_use_loader_model_only": ("STRING", {"default": "", "tooltip": "An optional string to prepend to the loras use_loader_model_only list, useful for programmatic addition of loras"}),
             }
         }
 
     def get_exposed_model(self, id, label, model, loras, loras_strengths, loras_use_loader_model_only, is_diffusion_model, diffusion_model_weight_dtype, limit_to_family, limit_to_group, tooltip, advanced, index,
-                          disable_loras_selection, disable_checkpoint_selection, optional_vae="", optional_clip="", optional_clip_type=""):
+                          disable_loras_selection, disable_checkpoint_selection, optional_vae="", optional_clip="", optional_clip_type="", optional_lora_prepend="", optional_lora_prepend_strengths="", optional_lora_prepend_use_loader_model_only=""):
         # first lets load the checkpoint
         (model_loaded, clip, vae) = AIHubUtilsLoadModel().load_model(
             model,
@@ -1100,13 +1110,15 @@ class AIHubExposeModel:
             if len(clips) > 2:
                 raise ValueError("Error: Only a max of two optional_clip entries are supported for DualClip")
 
-            (clip,) = AIHubUtilsLoadCLIP().load_clip(clips[0], clips[1] if len(clips) > 1 else "", optional_clip_type)
+            (clip,) = AIHubUtilsLoadCLIP().load_clip(clips[0], clips[1] if len(clips) > 1 else "", optional_clip_type, "default")
+
+        actual_loras_list_str = optional_lora_prepend + ("," if optional_lora_prepend and loras else "") + loras
 
         # now we have to apply the loras if given
-        if loras and model_loaded is not None:
-            lora_list = [l.strip() for l in loras.split(",") if l.strip()]
-            strengths_list = [float(s.strip()) for s in loras_strengths.split(",") if s.strip()]
-            use_loader_model_only_list = [s.strip() == "t" for s in loras_use_loader_model_only.split(",")]
+        if actual_loras_list_str and model_loaded is not None:
+            lora_list = [l.strip() for l in actual_loras_list_str.split(",") if l.strip()]
+            strengths_list = [float(s.strip()) for s in (optional_lora_prepend_strengths + ("," if optional_lora_prepend_strengths and loras_strengths else "") + loras_strengths).split(",") if s.strip()]
+            use_loader_model_only_list = [s.strip() == "t" for s in (optional_lora_prepend_use_loader_model_only + ("," if optional_lora_prepend_use_loader_model_only and loras_use_loader_model_only else "") + loras_use_loader_model_only).split(",")]
             if len(strengths_list) != len(lora_list):
                 raise ValueError("Error: The number of lora strengths must match the number of loras")
             if len(use_loader_model_only_list) != len(lora_list):
@@ -3005,6 +3017,12 @@ class AIHubMetaExportModel:
         with open(os.path.join(AIHUB_MODELS_DIR, json_filename), "w", encoding="utf-8") as f:
             json.dump(model_JSON, f, indent=4)
 
+        # create folder if it does not exist
+        if not os.path.exists(AIHUB_MODELS_LOCALE_DIR):
+            os.makedirs(AIHUB_MODELS_LOCALE_DIR)
+        if not os.path.exists(os.path.join(AIHUB_MODELS_LOCALE_DIR, "default")):
+            os.makedirs(os.path.join(AIHUB_MODELS_LOCALE_DIR, "default"))
+        
         with open(os.path.join(AIHUB_MODELS_LOCALE_DIR, "default", json_filename), "w", encoding="utf-8") as f:
             json.dump({"name": name, "description": description}, f, indent=4)
 

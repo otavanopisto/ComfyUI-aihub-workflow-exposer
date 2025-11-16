@@ -661,6 +661,12 @@ class AIHubServer:
                         # local_file is a special case, it must represent a local file path within a subdirectory that is
                         # specific for the given websocket session, so we must check that it is alphanumeric and does not contain any path traversal characters
                         local_file_path = request["expose"][expose_id]["local_file"]
+
+                        if local_file_path is None:
+                            # allow it
+                            workflow_copy[key]["inputs"]["local_file"] = None
+                            continue
+
                         local_file_path_unmodified = local_file_path
                         #check that it is a string and that fits the 0-9 A-Z a-z _-.
                         if not isinstance(local_file_path, str) or not re.match(r'^[0-9A-Za-z_\-\.]+$', local_file_path):
