@@ -1075,7 +1075,7 @@ class AIHubExposeModel:
                 "advanced": ("BOOLEAN", {"default": False, "tooltip": "If set to true, it will make this option be hidden under advanced options for this workflow"}),
                 "index": ("INT", {"default": 0, "tooltip": "This value is used for sorting the input fields when displaying; lower values will appear first."}),
                 "disable_loras_selection": ("BOOLEAN", {"default": False, "tooltip": "If set to true, it will disable the loras selection field in the UI"}),
-                "disable_checkpoint_selection": ("BOOLEAN", {"default": False, "tooltip": "If set to true, it will disable the checkpoint selection field in the UI"}),
+                "disable_model_selection": ("BOOLEAN", {"default": False, "tooltip": "If set to true, it will disable the checkpoint selection field in the UI"}),
             },
             "optional": {
                 "optional_vae": ("STRING", {"default": "", "tooltip": "The default for an optional VAE to load, if not given the VAE from the checkpoint will be used if available"}),
@@ -1089,7 +1089,7 @@ class AIHubExposeModel:
         }
 
     def get_exposed_model(self, id, label, model, loras, loras_strengths, loras_use_loader_model_only, is_diffusion_model, diffusion_model_weight_dtype, limit_to_family, limit_to_group, tooltip, advanced, index,
-                          disable_loras_selection, disable_checkpoint_selection, optional_vae="", optional_clip="", optional_clip_type="", optional_lora_prepend="", optional_lora_prepend_strengths="", optional_lora_prepend_use_loader_model_only=""):
+                          disable_loras_selection, disable_model_selection, optional_vae="", optional_clip="", optional_clip_type="", optional_lora_prepend="", optional_lora_prepend_strengths="", optional_lora_prepend_use_loader_model_only=""):
         # first lets load the checkpoint
         (model_loaded, clip, vae) = AIHubUtilsLoadModel().load_model(
             model,
