@@ -2805,7 +2805,7 @@ class Normalizer:
             if mask is not None:
                 c_mask = masks[i]
                 # check if the mask has the correct size
-                if c_mask.shape[2] != normalize_width or c_mask.shape[3] != normalize_height:
+                if c_mask.shape[1] != normalize_width or c_mask.shape[2] != normalize_height:
                     samples_masks = c_mask.unsqueeze(1)  # NCHW -> NHW
                     samples_masks = common_upscale(
                         samples_masks, normalize_width, normalize_height, self.normalize_upscale_method, crop="center"
