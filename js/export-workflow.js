@@ -386,7 +386,7 @@ function validateWorkflow(exported, modelsAndLoras) {
 
         if (node.class_type === "AIHubExposeModel" || node.class_type === "AIHubExposeModelSimple") {
             const potentialModel = node.inputs.model;
-            if (potentialModel && !modelsAndLoras.checkpoints.includes(potentialModel) && !modelsAndLoras.diffusion_models.includes(potentialModel)) {
+            if (potentialModel && !modelsAndLoras.checkpoints.includes(potentialModel) && !modelsAndLoras.diffusion_models.includes(potentialModel) && !modelsAndLoras.gguf.includes(potentialModel)) {
                 const dialog = new ComfyDialog()
                 dialog.show("Validation Error: The model '" + potentialModel + "' in node " + nodeIdValue + " is not available on the server");
                 return false;
@@ -440,7 +440,7 @@ function validateWorkflow(exported, modelsAndLoras) {
                 }
 
                 for (const lora of loraList) {
-                    if (!modelsAndLoras.loras.includes(lora)) {
+                    if (!modelsAndLoras.loras.includes(lora) && !modelsAndLoras.gguf.includes(lora)) {
                         const dialog = new ComfyDialog()
                         dialog.show("Validation Error: The lora '" + lora + "' in node " + nodeIdValue + " is not available on the server");
                         return false;

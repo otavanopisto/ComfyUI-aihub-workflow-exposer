@@ -109,7 +109,7 @@ async def handle_workflow_image_add(request):
 @PromptServer.instance.routes.get("/aihub_list_models_and_loras")
 async def handle_list_models(request):
     return web.json_response({"checkpoints": get_filename_list("checkpoints"), "diffusion_models": get_filename_list("diffusion_models"),
-                               "loras": get_filename_list("loras")})
+                               "loras": get_filename_list("loras"), "gguf": get_filename_list('model_gguf')})
 
 class AIHubServer:
     """

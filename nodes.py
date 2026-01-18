@@ -15,6 +15,7 @@ from torch.nn.functional import interpolate
 from comfy.utils import common_upscale
 from comfy_api.latest import InputImpl, Types
 from .video import video_save_to
+from nodes import NODE_CLASS_MAPPINGS
 
 from PIL import Image
 
@@ -37,6 +38,7 @@ print("AIHub Server Started")
 
 LAST_MODEL_FILE = None
 LAST_MODEL_FILE_IS_DIFFUSION_MODEL = False
+LAST_MODEL_FILE_IS_GGUF_MODEL = False
 LAST_MODEL = None
 LAST_MODEL_CLIP = None
 LAST_MODEL_VAE = None
@@ -1527,6 +1529,8 @@ class AIHubActionNewImage:
         return float("NaN")
     
     def run_action(self, image, action, name, mask=None, file_name="", autoopen=False):
+        print("RUNNING ACTION")
+
         if image is None:
             return (None, None)
 
@@ -2527,14 +2531,17 @@ class AIHubUtilsLoadModel:
         clip = None
         vae = None
 
+        is_gguf = model in get_filename_list('model_gguf')
+
         global LAST_MODEL
         global LAST_MODEL_CLIP
         global LAST_MODEL_VAE
         global LAST_MODEL_FILE_IS_DIFFUSION_MODEL
         global LAST_MODEL_FILE
+        global LAST_MODEL_FILE_IS_GGUF_MODEL
         global LAST_MODEL_WEIGHT_DTYPE
         if model:
-            if is_diffusion_model:
+            if is_diffusion_model and not is_gguf:
                 if LAST_MODEL_FILE == model and LAST_MODEL_FILE_IS_DIFFUSION_MODEL == is_diffusion_model and LAST_MODEL_WEIGHT_DTYPE == diffusion_model_weight_dtype:
                     print(f"Reusing already loaded diffusion model {model} with weight dtype {diffusion_model_weight_dtype}")
                     model_loaded = LAST_MODEL
@@ -2543,6 +2550,17 @@ class AIHubUtilsLoadModel:
                     loader = UNETLoader()
                     model_loaded, = loader.load_unet(model, diffusion_model_weight_dtype)
                     LAST_MODEL_WEIGHT_DTYPE = diffusion_model_weight_dtype
+            elif is_gguf:
+                if LAST_MODEL_FILE == model and LAST_MODEL_FILE_IS_GGUF_MODEL == is_gguf:
+                    print(f"Reusing already loaded GGUF model {model}")
+                    model_loaded = LAST_MODEL
+                    clip = LAST_MODEL_CLIP
+                    vae = LAST_MODEL_VAE
+                else:
+                    print("Using GGUFLoader to load the GGUF model " + str(model))
+                    LoaderGGUF = NODE_CLASS_MAPPINGS.get("LoaderGGUF")
+                    loader = LoaderGGUF()
+                    model_loaded, = loader.load_model(model)
             else:
                 if LAST_MODEL_FILE == model and LAST_MODEL_FILE_IS_DIFFUSION_MODEL == is_diffusion_model:
                     print(f"Reusing already loaded checkpoint model {model}")
@@ -2588,12 +2606,19 @@ class AIHubUtilsLoadVAE:
     def load_vae(self, vae):
         vae_loaded = None
 
+        is_gguf = vae in get_filename_list('model_gguf')
+
         global LAST_VAE
         global LAST_VAE_FILE
         if vae:
             if LAST_VAE_FILE == vae:
                 print(f"Reusing already loaded VAE {vae}")
                 vae_loaded = LAST_VAE
+            elif is_gguf:
+                print("Using GGUFLoader to load the GGUF VAE " + str(vae))
+                VaeGGUF = NODE_CLASS_MAPPINGS.get("VaeGGUF")
+                loader = VaeGGUF()
+                vae_loaded, = loader.load_vae(vae)
             else:
                 print("Using VAELoader to load the VAE " + str(vae))
                 loader = VAELoader()
@@ -2633,6 +2658,8 @@ class AIHubUtilsLoadCLIP:
     def load_clip(self, clip_1, clip_2, type, device):
         clip_loaded = None
 
+        is_gguf = clip_1 in get_filename_list('model_gguf')
+
         global LAST_CLIP_FILE
         global LAST_CLIP
         global LAST_CLIP_DUAL
@@ -2647,6 +2674,11 @@ class AIHubUtilsLoadCLIP:
                 if LAST_CLIP_FILE == f"{clip_1_stripped},{clip_2_stripped}" and LAST_CLIP_TYPE == type and LAST_CLIP_DUAL == True:
                     print(f"Reusing already loaded Dual CLIP {clip_1_stripped},{clip_2_stripped} with type {type}")
                     clip_loaded = LAST_CLIP
+                elif is_gguf:
+                    print(f"Using GGUFLoader to load the Dual GGUF CLIP {clip_1_stripped},{clip_2_stripped} with type {type}")
+                    DualClipLoaderGGUF = NODE_CLASS_MAPPINGS.get("DualClipLoaderGGUF")
+                    clip_loader = DualClipLoaderGGUF()
+                    clip_loaded, = clip_loader.load_clip(clip_1_stripped, clip_2_stripped, type, device=device)
                 else:
                     clip_loader = DualCLIPLoader()
                     clip_loaded, = clip_loader.load_clip(clip_1_stripped, clip_2_stripped, type, device=device)
@@ -2655,6 +2687,11 @@ class AIHubUtilsLoadCLIP:
                 if LAST_CLIP_FILE == clip_1_stripped and LAST_CLIP_TYPE == type and LAST_CLIP_DUAL == False:
                     print(f"Reusing already loaded CLIP {clip_1_stripped} with type {type}")
                     clip_loaded = LAST_CLIP
+                elif is_gguf:
+                    print(f"Using GGUFLoader to load the GGUF CLIP {clip_1_stripped} with type {type}")
+                    ClipLoaderGGUF = NODE_CLASS_MAPPINGS.get("ClipLoaderGGUF")
+                    clip_loader = ClipLoaderGGUF()
+                    clip_loaded, = clip_loader.load_clip(clip_1_stripped, type, device=device)
                 else:
                     print(f"Using CLIPLoader to load the CLIP {clip_1_stripped} with type {type}")
                     clip_loader = CLIPLoader()
@@ -2938,16 +2975,16 @@ class AIHubMetaExportModel:
     def INPUT_TYPES(s):
         return {
             "required": {
-                "model": (get_filename_list("checkpoints") + get_filename_list("diffusion_models"), {"tooltip": "The model to export"}),
+                "model": (get_filename_list("checkpoints") + get_filename_list("diffusion_models") + get_filename_list("diffusion_models") + get_filename_list('model_gguf'), {"tooltip": "The model to export"}),
                 "weight_dtype": (WEIGHT_DTYPES, {"default": "default", "tooltip": "The weight dtype to use when loading the diffusion model, this is only useful if the model is a diffusion model"}),
                 "context": (["image", "video", "audio", "3d", "text"], {"default": "image", "tooltip": "The context to use for the model", "multiline": True}),
                 "name": ("STRING", {"default": "", "tooltip": "The name to use for the model in a human readable format, if not given the model filename will be used"}),
                 "description": ("STRING", {"default": "", "tooltip": "The description to use for the model, this is shown in the UI", "multiline": True}),
                 "family": ("STRING", {"default": "sdxl", "tooltip": "The family to use for the model, this is used for groupping models in the UI"}),
                 "group": ("STRING", {"default": "my_checkpoint_name", "tooltip": "The group to use for the model, this is used for groupping models in the UI"}),
-                "vae": ([""] + get_filename_list("vae"), {"default": "", "tooltip": "The VAE to use for the model, if not given the VAE from the checkpoint will be used"}),
-                "clip_1": ([""] + get_filename_list("text_encoders"), {"default": "", "tooltip": "The CLIP to use for the model, if not given the CLIP from the checkpoint will be used"}),
-                "clip_2": ([""] + get_filename_list("text_encoders"), {"default": "", "tooltip": "The second CLIP to use for the model, if not given a single CLIP will be used"}),
+                "vae": ([""] + get_filename_list("vae") + get_filename_list('model_gguf'), {"default": "", "tooltip": "The VAE to use for the model, if not given the VAE from the checkpoint will be used"}),
+                "clip_1": ([""] + get_filename_list("text_encoders") + get_filename_list('model_gguf'), {"default": "", "tooltip": "The CLIP to use for the model, if not given the CLIP from the checkpoint will be used"}),
+                "clip_2": ([""] + get_filename_list("text_encoders") + get_filename_list('model_gguf'), {"default": "", "tooltip": "The second CLIP to use for the model, if not given a single CLIP will be used"}),
                 "clip_type": (CLIP_TYPES, {"default": "stable_diffusion", "tooltip": "The type of the CLIP to use"}),
                 "default_cfg": ("FLOAT", {"default": 7.0, "min": 0.0, "max": 100.0, "tooltip": "The default CFG scale to use for the model"}),
                 "default_steps": ("INT", {"default": 20, "min": 1, "max": 100, "tooltip": "The default number of steps to use for the model"}),
@@ -2955,7 +2992,7 @@ class AIHubMetaExportModel:
                 "default_sampler": (comfy.samplers.KSampler.SAMPLERS, {"default": "dpmpp_sde", "tooltip": "The default sampler to use for the model"})
             },
             "optional": {
-                "optional_image": ("IMAGE", {"default": "", "tooltip": "An optional image to use for the model"})
+                "optional_image": ("IMAGE", {"default": "", "tooltip": "An optional image to use for the model"}),
             }
         }
     
