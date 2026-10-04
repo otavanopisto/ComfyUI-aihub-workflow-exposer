@@ -8,6 +8,8 @@ import torch
 import torchaudio
 import random
 import comfy.samplers
+import comfy.model_management
+import node_helpers
 import safetensors.torch
 from comfy.cli_args import args
 from comfy_extras.nodes_audio import load as load_audio_file
@@ -17,7 +19,7 @@ from comfy_api.latest import InputImpl, Types
 from .video import video_save_to
 from nodes import NODE_CLASS_MAPPINGS
 
-from PIL import Image
+from PIL import Image, ImageOps, ImageSequence
 
 import numpy as np
 
@@ -38,6 +40,58 @@ print("AIHub Server Started")
 
 LAST_MODEL_FILE = None
 LAST_MODEL_FILE_IS_DIFFUSION_MODEL = False
+
+def load_image_from_path(image_path):
+    """
+    Loads an image directly from an absolute filesystem path, replicating the
+    behavior of ComfyUI's LoadImage node without its input-directory path
+    validation (get_annotated_filepath), which rejects absolute temp paths.
+    Returns a tuple of (IMAGE, MASK).
+    """
+    dtype = comfy.model_management.intermediate_dtype()
+    device = comfy.model_management.intermediate_device()
+
+    components = InputImpl.VideoFromFile(image_path).get_components()
+    if components.images.shape[0] > 0:
+        return (
+            components.images.to(device=device, dtype=dtype),
+            (1.0 - components.alpha[..., -1]).to(device=device, dtype=dtype) if components.alpha is not None else torch.zeros((components.images.shape[0], 64, 64), dtype=dtype, device=device),
+        )
+
+    # This handles animated webp which pyav does not support loading
+    img = node_helpers.pillow(Image.open, image_path)
+
+    output_images = []
+    output_masks = []
+    w, h = None, None
+
+    for i in ImageSequence.Iterator(img):
+        i = node_helpers.pillow(ImageOps.exif_transpose, i)
+
+        image = i.convert("RGB")
+
+        if len(output_images) == 0:
+            w = image.size[0]
+            h = image.size[1]
+
+        if image.size[0] != w or image.size[1] != h:
+            continue
+
+        image = np.array(image).astype(np.float32) / 255.0
+        image = torch.from_numpy(image)[None,]
+        if 'A' in i.getbands():
+            mask = np.array(i.getchannel('A')).astype(np.float32) / 255.0
+            mask = 1. - torch.from_numpy(mask)
+        else:
+            mask = torch.zeros((64, 64), dtype=torch.float32, device="cpu")
+        output_images.append(image.to(dtype=dtype))
+        output_masks.append(mask.unsqueeze(0).to(dtype=dtype))
+
+    output_image = torch.cat(output_images, dim=0)
+    output_mask = torch.cat(output_masks, dim=0)
+
+    return (output_image.to(device=device, dtype=dtype), output_mask.to(device=device, dtype=dtype))
+
 LAST_MODEL_FILE_IS_GGUF_MODEL = False
 LAST_MODEL = None
 LAST_MODEL_CLIP = None
@@ -601,10 +655,9 @@ class AIHubExposeImage:
         mask = None
         if local_file is not None:
             if (local_file and os.path.exists(local_file)):
-                # Instantiate a LoadImage node and use its logic to load the file
-                loader = LoadImage()
-                # The load_image method returns a tuple, so we need to get the first element
-                loaded_image_tuple = loader.load_image(local_file)
+                # Load the file directly from its absolute path
+                # The loader returns a tuple, so we need to get the first element
+                loaded_image_tuple = load_image_from_path(local_file)
                 image = loaded_image_tuple[0]
                 mask = loaded_image_tuple[1]
                 # comfyui has a bug where masks are inverted, so we need to invert it back
@@ -661,10 +714,9 @@ class AIHubExposeFrame:
         image = None
         if local_file is not None:
             if (os.path.exists(local_file) and local_file):
-                # Instantiate a LoadImage node and use its logic to load the file
-                loader = LoadImage()
-                # The load_image method returns a tuple, so we need to get the first element
-                loaded_image_tuple = loader.load_image(local_file)
+                # Load the file directly from its absolute path
+                # The loader returns a tuple, so we need to get the first element
+                loaded_image_tuple = load_image_from_path(local_file)
                 image = loaded_image_tuple[0]
             elif not optional:
                 filenameOnly = os.path.basename(local_file)
@@ -709,10 +761,9 @@ class AIHubExposeProjectImage:
         mask = None
         if local_file is not None:
             if (os.path.exists(local_file) and local_file):
-                # Instantiate a LoadImage node and use its logic to load the file
-                loader = LoadImage()
-                # The load_image method returns a tuple, so we need to get the first element
-                loaded_image_tuple = loader.load_image(local_file)
+                # Load the file directly from its absolute path
+                # The loader returns a tuple, so we need to get the first element
+                loaded_image_tuple = load_image_from_path(local_file)
                 image = loaded_image_tuple[0]
                 mask = loaded_image_tuple[1]
                 # comfyui has a bug where masks are inverted, so we need to invert it back
@@ -940,13 +991,12 @@ class AIHubExposeImageBatch:
 
                 loaded_images = []
                 loaded_masks = []
-                loader = LoadImage()
                 
                 for filename in filenames:
                     # Check if the file exists before trying to load it.
                     if os.path.exists(filename):
                         # Load each image and append it to the list.
-                        loaded_img_tuple = loader.load_image(filename)
+                        loaded_img_tuple = load_image_from_path(filename)
                         loaded_images.append(loaded_img_tuple[0])
                         mask = loaded_img_tuple[1]
                         # comfyui has a bug where masks are inverted, so we need to invert it back
@@ -1015,13 +1065,12 @@ class AIHubExposeProjectImageBatch:
                 
                 loaded_images = []
                 loaded_masks = []
-                loader = LoadImage()
                 
                 for filename in filenames:
                     # Check if the file exists before trying to load it.
                     if os.path.exists(filename):
                         # Load each image and append it to the list.
-                        loaded_img_tuple = loader.load_image(filename)
+                        loaded_img_tuple = load_image_from_path(filename)
                         loaded_images.append(loaded_img_tuple[0])
                         mask = loaded_img_tuple[1]
                         # comfyui has a bug where masks are inverted, so we need to invert it back
